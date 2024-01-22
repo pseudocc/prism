@@ -629,63 +629,8 @@ pub const Terminal = struct {
     };
 };
 
-fn test_terminal() !void {
-    const file = std.io.getStdIn();
-    var writer = file.writer();
-    var term = try Terminal.init(file);
-    try term.enableRaw();
-    try std.fmt.format(writer, "{s}", .{altscreen.enter});
-    try std.fmt.format(writer, "{s}", .{mouse.track});
-
-    std.testing.log_level = .debug;
-    defer term.disableRaw() catch {};
-    defer std.fmt.format(writer, "{s}", .{altscreen.leave}) catch {};
-    defer std.fmt.format(writer, "{s}", .{mouse.untrack}) catch {};
-
-    var reader = Terminal.EventReader{ .file = file };
-    var command_mode = false;
-    while (true) {
-        const event = try reader.read();
-        if (event != .idle) {
-            std.debug.print("{s}\r\n", .{event});
-        }
-        switch (event) {
-            .key => |e| {
-                if (e.key != .code) {
-                    command_mode = false;
-                    continue;
-                }
-                switch (e.key.code) {
-                    ':' => {
-                        command_mode = true;
-                        continue;
-                    },
-                    'c' => {
-                        if (command_mode) {
-                            try std.fmt.format(writer, "{s}{s}", .{
-                                edit.erase.display(.both),
-                                cursor.goto(1, 1),
-                            });
-                            command_mode = false;
-                        }
-                    },
-                    'q' => {
-                        if (command_mode) {
-                            break;
-                        }
-                    },
-                    else => {
-                        command_mode = false;
-                    },
-                }
-            },
-            else => {},
-        }
-    }
-}
-
-test "terminal" {
-    try test_terminal();
+test {
+    std.testing.refAllDecls(@This());
 }
 
 /// Insert/Replace Mode (IRM)

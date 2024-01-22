@@ -36,7 +36,6 @@ pub fn build(b: *std.Build) void {
         .source_file = .{ .path = "prism.zig" },
         .dependencies = prism_deps,
     });
-    _ = prism;
 
     var lib = b.addStaticLibrary(.{
         .name = "prism",
@@ -63,4 +62,19 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&run_main_tests.step);
+
+    const examples_step = b.step("examples", "Build examples");
+    const examples: []const []const u8 = &.{"event"};
+    for (examples) |name| {
+        const example = b.addExecutable(.{
+            .name = name,
+            .root_source_file = .{ .path = b.fmt("examples/{s}.zig", .{name}) },
+            .target = target,
+            .optimize = optimize,
+        });
+        const install_example = b.addInstallArtifact(example, .{});
+        example.addModule("prism", prism);
+        examples_step.dependOn(&example.step);
+        examples_step.dependOn(&install_example.step);
+    }
 }

@@ -1,7 +1,18 @@
 # PRISM
 
 Prism is a pure zig terminal manipulation library for Linux to build TUI programs.
-Currently, Prism is still working in progress.
+
+## Quick Start
+
+Enter the alternate screen, enable the raw module, turn on mouse tracking,
+take a look at the `examples/event.zig`.
+
+You may also want to run this example, which is pretty simple:
+
+```bash
+zig build examples
+zig-out/bin/event
+```
 
 ## References
 
