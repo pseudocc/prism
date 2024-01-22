@@ -3,37 +3,64 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    _ = b.addModule("prism", .{
-        .root_source_file = .{ .path = "prism.zig" },
+
+    const csi = b.createModule(.{
+        .source_file = .{ .path = "utils/csi.zig" },
+    });
+    const cursor = b.addModule("prism.cursor", .{
+        .source_file = .{ .path = "prism/cursor.zig" },
+        .dependencies = &.{
+            .{ .name = "prism.csi", .module = csi },
+        },
+    });
+    const edit = b.addModule("prism.edit", .{
+        .source_file = .{ .path = "prism/edit.zig" },
+        .dependencies = &.{
+            .{ .name = "prism.csi", .module = csi },
+        },
+    });
+    const graphic = b.addModule("prism.graphic", .{
+        .source_file = .{ .path = "prism/graphic.zig" },
+        .dependencies = &.{
+            .{ .name = "prism.csi", .module = csi },
+        },
     });
 
-    const lib = b.addStaticLibrary(.{
+    const prism_deps: []const std.build.ModuleDependency = &.{
+        .{ .name = "prism.csi", .module = csi },
+        .{ .name = "prism.cursor", .module = cursor },
+        .{ .name = "prism.edit", .module = edit },
+        .{ .name = "prism.graphic", .module = graphic },
+    };
+    const prism = b.addModule("prism", .{
+        .source_file = .{ .path = "prism.zig" },
+        .dependencies = prism_deps,
+    });
+    _ = prism;
+
+    var lib = b.addStaticLibrary(.{
         .name = "prism",
-        // In this case the main source file is merely a path, however, in more
-        // complicated build scripts, this could be a generated file.
         .root_source_file = .{ .path = "prism.zig" },
         .target = target,
         .optimize = optimize,
     });
+    for (prism_deps) |dep| {
+        lib.addModule(dep.name, dep.module);
+    }
 
-    // This declares intent for the library to be installed into the standard
-    // location when the user invokes the "install" step (the default step when
-    // running `zig build`).
     b.installArtifact(lib);
 
-    // Creates a step for unit testing. This only builds the test executable
-    // but does not run it.
     const main_tests = b.addTest(.{
         .root_source_file = .{ .path = "prism.zig" },
         .target = target,
         .optimize = optimize,
     });
+    for (prism_deps) |dep| {
+        lib.addModule(dep.name, dep.module);
+    }
 
     const run_main_tests = b.addRunArtifact(main_tests);
 
-    // This creates a build step. It will be visible in the `zig build --help` menu,
-    // and can be selected like this: `zig build test`
-    // This will evaluate the `test` step rather than the default, which is "install".
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&run_main_tests.step);
 }

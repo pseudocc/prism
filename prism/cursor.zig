@@ -1,6 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
-const csi = @import("../utils/csi.zig");
+const csi = @import("prism.csi");
 
 pub const Cursor = union(enum) {
     const Self = @This();

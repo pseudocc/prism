@@ -1,9 +1,9 @@
 const std = @import("std");
-const csi = @import("utils/csi.zig");
+const csi = @import("prism.csi");
 
-pub const cursor = @import("prism/cursor.zig");
-pub const edit = @import("prism/edit.zig");
-pub const graphic = @import("prism/graphic.zig");
+pub const cursor = @import("prism.cursor");
+pub const edit = @import("prism.edit");
+pub const graphic = @import("prism.graphic");
 
 const cc = std.ascii.control_code;
 const QMARK = std.unicode.utf8Decode("�") catch unreachable;
