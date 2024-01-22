@@ -1,6 +1,6 @@
 const std = @import("std");
 const testing = std.testing;
-const csi = @import("csi.zig");
+const csi = @import("../utils/csi.zig");
 
 pub const Input = union(enum) {
     const Self = @This();
