@@ -5,6 +5,26 @@ pub const cursor = @import("cursor.zig");
 pub const edit = @import("edit.zig");
 pub const graphic = @import("graphic.zig");
 
+const cc = std.ascii.control_code;
+const QMARK = std.unicode.utf8Decode("�") catch unreachable;
+
+fn putc(writer: anytype, c: u8) !void {
+    const g = graphic;
+    const grey = g.attrs(&.{g.fg(.{ .ansi256 = 8 })});
+    const reset = g.attrs(&.{});
+    if (std.ascii.isPrint(c)) {
+        try std.fmt.format(writer, "{c}", .{c});
+    } else {
+        try std.fmt.format(writer, "{s}\\x{x}{s}", .{ grey, c, reset });
+    }
+}
+
+fn puts(writer: anytype, s: []const u8) !void {
+    for (s) |c| {
+        try putc(writer, c);
+    }
+}
+
 pub const Input = enum {
     const Self = @This();
 
@@ -151,17 +171,64 @@ pub const Terminal = struct {
     }
 
     pub const Event = union(enum) {
+        /// Key event.
         key: KeyEvent,
+        /// Unicode code point.
         unicode: u21,
+        /// Mouse event.o
         /// Only sent when mouse tracking is enabled.
         mouse: MouseEvent,
+        /// Unknown event, value is not allcated.
+        /// If you need to store the value, make a copy.
         unknown: []const u8,
+        /// Non blocking read returned 0 bytes.
         idle: void,
+
+        pub fn format(
+            self: Event,
+            comptime _: []const u8,
+            _: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            try writer.writeAll("Event::");
+            switch (self) {
+                .key => try std.fmt.format(writer, "Key: {s}", .{self.key}),
+                .unicode => {
+                    var buffer: [4]u8 = undefined;
+                    const l = std.unicode.utf8Encode(self.unicode, &buffer) catch unreachable;
+                    try std.fmt.format(writer, "Unicode: {s}", .{buffer[0..l]});
+                },
+                .mouse => try std.fmt.format(writer, "Mouse::{s}", .{self.mouse}),
+                .unknown => |data| {
+                    try writer.writeAll("Unknown: ");
+                    try puts(writer, data);
+                },
+                .idle => try writer.writeAll("Idle"),
+            }
+        }
     };
 
     pub const KeyEvent = struct {
         key: Key,
         modifiers: Modifiers,
+
+        pub fn format(
+            self: KeyEvent,
+            comptime _: []const u8,
+            _: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            if (self.modifiers.ctrl) {
+                try writer.writeAll("CTRL + ");
+            }
+            if (self.modifiers.alt) {
+                try writer.writeAll("ALT + ");
+            }
+            if (self.modifiers.shift) {
+                try writer.writeAll("SHIFT + ");
+            }
+            try std.fmt.format(writer, "{s}", .{self.key});
+        }
 
         fn byte(code: u8) KeyEvent {
             var key_event: KeyEvent = .{
@@ -173,11 +240,18 @@ pub const Terminal = struct {
                 key_event.key = .{ .code = code };
                 key_event.modifiers.shift = std.ascii.isUpper(code);
             } else if (std.ascii.isControl(code)) {
-                // ctrl + backspace => bs
-                // backspace => del
+                switch (code) {
+                    cc.bs => {
+                        key_event.key = .backspace;
+                        key_event.modifiers.ctrl = true;
+                    },
+                    cc.del => key_event.key = .backspace,
+                    cc.cr => key_event.key = .enter,
+                    cc.ht => key_event.key = .tab,
+                    else => key_event.key = .{ .code = code },
+                }
                 if (code == cc.bs) {
-                    key_event.key = .{ .code = cc.del };
-                    key_event.modifiers.ctrl = true;
+                    key_event.key = .backspace;
                 } else {
                     key_event.key = .{ .code = code };
                 }
@@ -195,95 +269,134 @@ pub const Terminal = struct {
                 key_event = byte(data[1]);
                 key_event.modifiers.alt = true;
             } else {
-                key_event = .{
-                    .key = try Keys.parse(data),
-                    .modifiers = .{},
-                };
+                key_event.modifiers = .{};
+                switch (data[1]) {
+                    'O' => {
+                        // F1-F4 without modifiers
+                        key_event.key = .{ .f = data[2] - 'O' };
+                    },
+                    '[' => {
+                        const code = data[data.len - 1];
+                        const end = if (std.mem.indexOfPos(u8, data, 2, ";")) |i| semi: {
+                            const mod = data[i + 1] - '1';
+                            key_event.modifiers.shift = (mod & 1) != 0;
+                            key_event.modifiers.alt = (mod & 2) != 0;
+                            key_event.modifiers.ctrl = (mod & 4) != 0;
+                            break :semi i;
+                        } else data.len - 1;
+
+                        key_event.key = switch (code) {
+                            'A' => .up,
+                            'B' => .down,
+                            'C' => .right,
+                            'D' => .left,
+                            'H' => .home,
+                            'F' => .end,
+                            'Z' => .backtab,
+                            'P' => .{ .f = 1 },
+                            'Q' => .{ .f = 2 },
+                            'S' => .{ .f = 4 },
+                            'u' => .{ .unhandled = .{
+                                .u = try std.fmt.parseInt(u16, data[2..end], 10),
+                            } },
+
+                            '~' => this: {
+                                const kind = try std.fmt.parseInt(u8, data[2..end], 10);
+                                break :this switch (kind) {
+                                    2 => .insert,
+                                    3 => .delete,
+                                    5 => .page_up,
+                                    6 => .page_down,
+                                    13 => .{ .f = 3 },
+                                    15 => .{ .f = 5 },
+                                    17 => .{ .f = 6 },
+                                    18 => .{ .f = 7 },
+                                    19 => .{ .f = 8 },
+                                    20 => .{ .f = 9 },
+                                    21 => .{ .f = 10 },
+                                    23 => .{ .f = 11 },
+                                    24 => .{ .f = 12 },
+                                    29 => .menu,
+                                    else => |n| .{ .unhandled = .{ .tl = n } },
+                                };
+                            },
+                            else => return error.InvalidKeyEvent,
+                        };
+                    },
+                    else => return error.InvalidKeyEvent,
+                }
             }
+
             return key_event;
         }
     };
 
-    const cc = std.ascii.control_code;
-
-    /// Shorthand for common keys.
-    /// Example: CTRL + M = Keys.enter
-    pub const Keys = struct {
-        const left: Key = .{ .esc_seq = .left };
-        const right: Key = .{ .esc_seq = .right };
-        const up: Key = .{ .esc_seq = .up };
-        const down: Key = .{ .esc_seq = .down };
-        const home: Key = .{ .esc_seq = .home };
-        const end: Key = .{ .esc_seq = .end };
-        const page_up: Key = .{ .esc_seq = .page_up };
-        const page_down: Key = .{ .esc_seq = .page_down };
-        const insert: Key = .{ .esc_seq = .insert };
-        const delete: Key = .{ .esc_seq = .delete };
-        const backtab: Key = .{ .esc_seq = .backtab };
-
-        const backspace: Key = .{ .code = cc.del };
-        const enter: Key = ctrl('m');
-        const tab: Key = ctrl('i');
-
-        /// Shorthand for CTRL + key
-        pub fn ctrl(comptime code: u8) Key {
-            if (!std.ascii.isAlphabetic(code)) {
-                @compileError("alpha required");
-            }
-            // this works for both upper and lower case
-            return .{ .code = code & 0x1f };
-        }
-
-        fn csiseq(comptime value: anytype) []const u8 {
-            const seq = std.fmt.comptimePrint("{s}", .{value});
-            return seq;
-        }
-
-        fn parse(data: []const u8) !Key {
-            // TODO: handle more keys and use branches
-            const pairs = .{
-                .{ csiseq(cursor.left(1)), left },
-                .{ csiseq(cursor.right(1)), right },
-                .{ csiseq(cursor.up(1)), up },
-                .{ csiseq(cursor.down(1)), down },
-                .{ csiseq(cursor.goto(1, 1)), home },
-                .{ csiseq(cursor.prev(1)), end },
-                .{ csiseq(csi.ct("[2~")), insert },
-                .{ csiseq(csi.ct("[3~")), delete },
-                .{ csiseq(csi.ct("[5~")), page_up },
-                .{ csiseq(csi.ct("[6~")), page_down },
-                .{ csiseq(csi.ct("[Z")), backtab },
-            };
-
-            inline for (pairs) |pair| {
-                if (std.mem.eql(u8, data, pair[0])) {
-                    return pair[1];
-                }
-            }
-
-            return error.KeyNotFound;
-        }
-    };
-
     pub const Key = union(enum) {
-        esc_seq: enum {
-            left,
-            right,
-            up,
-            down,
-            home,
-            end,
-            insert,
-            delete,
-            page_up,
-            page_down,
-            backtab,
-        },
+        const Unhandled = union(enum) {
+            /// Unhandled CSI [ <N> u
+            u: u16,
+            /// Unhandled CSI [ <N> ~
+            tl: u8,
+        };
+
+        left: void,
+        right: void,
+        up: void,
+        down: void,
+        home: void,
+        end: void,
+        insert: void,
+        delete: void,
+        page_up: void,
+        page_down: void,
+        backtab: void,
+        menu: void,
+
+        // aliases
+        backspace: void,
+        enter: void,
+        tab: void,
 
         f: u8,
         code: u8,
         non_ascii: u8,
         null: void,
+        unhandled: Unhandled,
+
+        pub fn format(
+            self: Key,
+            comptime _: []const u8,
+            _: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            switch (self) {
+                .left => try writer.writeAll("Left"),
+                .right => try writer.writeAll("Right"),
+                .up => try writer.writeAll("Up"),
+                .down => try writer.writeAll("Down"),
+                .home => try writer.writeAll("Home"),
+                .end => try writer.writeAll("End"),
+                .insert => try writer.writeAll("Insert"),
+                .delete => try writer.writeAll("Delete"),
+                .page_up => try writer.writeAll("PageUp"),
+                .page_down => try writer.writeAll("PageDown"),
+                .backtab => try writer.writeAll("Backtab"),
+                .menu => try writer.writeAll("ContextMenu"),
+                .backspace => try writer.writeAll("Backspace"),
+                .enter => try writer.writeAll("Enter"),
+                .tab => try writer.writeAll("Tab"),
+                .f => try std.fmt.format(writer, "F{d}", .{self.f}),
+                .code, .non_ascii => |c| try putc(writer, c),
+                .null => try writer.writeAll("Null"),
+                .unhandled => |case| {
+                    try writer.writeAll("Unhandled CSI [ ");
+                    switch (case) {
+                        .u => |n| try std.fmt.format(writer, "{d} u", .{n}),
+                        .tl => |n| try std.fmt.format(writer, "{d} ~", .{n}),
+                    }
+                },
+            }
+        }
     };
 
     pub const Modifiers = struct {
@@ -298,6 +411,20 @@ pub const Terminal = struct {
             middle: void,
             right: void,
             extra: u8,
+
+            pub fn format(
+                self: Button,
+                comptime _: []const u8,
+                _: std.fmt.FormatOptions,
+                writer: anytype,
+            ) !void {
+                switch (self) {
+                    .left => try writer.writeAll("Left"),
+                    .middle => try writer.writeAll("Middle"),
+                    .right => try writer.writeAll("Right"),
+                    .extra => |n| try std.fmt.format(writer, "Extra({d})", .{n}),
+                }
+            }
         };
 
         pub const Wheel = enum {
@@ -305,6 +432,20 @@ pub const Terminal = struct {
             down,
             left,
             right,
+
+            pub fn format(
+                self: Wheel,
+                comptime _: []const u8,
+                _: std.fmt.FormatOptions,
+                writer: anytype,
+            ) !void {
+                switch (self) {
+                    .up => try writer.writeAll("Up"),
+                    .down => try writer.writeAll("Down"),
+                    .left => try writer.writeAll("Left"),
+                    .right => try writer.writeAll("Right"),
+                }
+            }
         };
 
         pub const State = union(enum) {
@@ -323,6 +464,24 @@ pub const Terminal = struct {
         move: bool,
         modifiers: Modifiers,
 
+        pub fn format(
+            self: MouseEvent,
+            comptime _: []const u8,
+            _: std.fmt.FormatOptions,
+            writer: anytype,
+        ) !void {
+            if (self.move) {
+                try writer.writeAll("Move");
+            } else {
+                switch (self.button) {
+                    .click => try std.fmt.format(writer, "Click::{s}", .{self.button.click}),
+                    .wheel => try std.fmt.format(writer, "Wheel::{s}", .{self.button.wheel}),
+                    .release => try writer.writeAll("Release"),
+                }
+            }
+            try std.fmt.format(writer, "({d}, {d})", .{ self.x, self.y });
+        }
+
         fn parse(data: []const u8) !MouseEvent {
             const csi_prefix = csi.ct("[M");
             var mouse_event: MouseEvent = undefined;
@@ -335,8 +494,6 @@ pub const Terminal = struct {
             const x = data[csi_prefix.len + 1] - 32;
             const y = data[csi_prefix.len + 2] - 32;
 
-            // TODO: remove debug code
-            std.debug.print("code: {d}\tx: {d}\ty: {d}\r\n", .{ button, x, y });
             mouse_event.x = x;
             mouse_event.y = y;
             mouse_event.move = (button & 32) != 0;
@@ -368,7 +525,6 @@ pub const Terminal = struct {
                 };
             };
 
-            std.debug.print("mouse event: {any}\r\n", .{mouse_event});
             return mouse_event;
         }
     };
@@ -401,23 +557,9 @@ pub const Terminal = struct {
             }
 
             self.offset += bytes_read;
-            var writer = std.io.getStdOut().writer();
-            for (self.buffer[0..self.offset]) |byte| {
-                if (std.ascii.isPrint(byte)) {
-                    std.fmt.format(writer, "{c}", .{byte}) catch unreachable;
-                } else {
-                    const g = graphic;
-                    const grey = g.attrs(&.{g.fg(.{ .ansi256 = 8 })});
-                    const reset = g.attrs(&.{});
-                    std.fmt.format(writer, "{s}\\x{x}{s}", .{ grey, byte, reset }) catch unreachable;
-                }
-            }
-            std.fmt.format(writer, "\r\n", .{}) catch unreachable;
-
             return try self.read();
         }
 
-        const QMARK = std.unicode.utf8Decode("�") catch unreachable;
         fn process(data: []const u8, event: *Event) usize {
             var processed: usize = undefined;
             var end: usize = undefined;
@@ -504,6 +646,9 @@ fn test_terminal() !void {
     var command_mode = false;
     while (true) {
         const event = try reader.read();
+        if (event != .idle) {
+            std.debug.print("{s}\r\n", .{event});
+        }
         switch (event) {
             .key => |e| {
                 if (e.key != .code) {
