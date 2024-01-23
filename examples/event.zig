@@ -29,12 +29,24 @@ pub fn main() !void {
 
     var reader = Terminal.EventReader{ .file = file };
     var command_mode = false;
+    var idles: usize = 0;
     try clear(&term);
 
     while (true) {
         const event = try reader.read();
         if (event != .idle) {
             try term.print("{s}\r\n", .{event});
+            idles = 0;
+        } else {
+            if (idles != 0) {
+                try term.print("{s}{s}{s}", .{
+                    cursor.up(1),
+                    cursor.column(1),
+                    edit.erase.line(.right),
+                });
+            }
+            idles += 1;
+            try term.print("{s} x {d}\r\n", .{ event, idles });
         }
         switch (event) {
             .key => |e| {
