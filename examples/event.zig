@@ -7,8 +7,8 @@ const cursor = prism.cursor;
 const mouse = prism.mouse;
 const edit = prism.edit;
 
-fn clear(writer: std.fs.File.Writer) !void {
-    try std.fmt.format(writer, "{s}{s}:q - quit\t:c - clear\r\n", .{
+fn clear(term: *Terminal) !void {
+    try term.print("{s}{s}:q - quit\t:c - clear\r\n", .{
         edit.erase.display(.both),
         cursor.goto(1, 1),
     });
@@ -16,24 +16,25 @@ fn clear(writer: std.fs.File.Writer) !void {
 
 pub fn main() !void {
     const file = std.io.getStdIn();
-    var writer = file.writer();
     var term = try Terminal.init(file);
     try term.enableRaw();
-    try std.fmt.format(writer, "{s}", .{altscreen.enter});
-    try std.fmt.format(writer, "{s}", .{mouse.track});
+    try term.write(altscreen.enter);
+    try term.write(mouse.track);
 
-    defer term.disableRaw() catch {};
-    defer std.fmt.format(writer, "{s}", .{altscreen.leave}) catch {};
-    defer std.fmt.format(writer, "{s}", .{mouse.untrack}) catch {};
+    defer {
+        term.disableRaw() catch {};
+        term.write(altscreen.leave) catch {};
+        term.write(mouse.untrack) catch {};
+    }
 
     var reader = Terminal.EventReader{ .file = file };
     var command_mode = false;
-    try clear(writer);
+    try clear(&term);
 
     while (true) {
         const event = try reader.read();
         if (event != .idle) {
-            try writer.print("{s}\r\n", .{event});
+            try term.print("{s}\r\n", .{event});
         }
         switch (event) {
             .key => |e| {
@@ -48,7 +49,7 @@ pub fn main() !void {
                     },
                     'c' => {
                         if (command_mode) {
-                            try clear(writer);
+                            try clear(&term);
                             command_mode = false;
                         }
                     },
