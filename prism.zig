@@ -250,11 +250,6 @@ pub const Terminal = struct {
                     cc.ht => key_event.key = .tab,
                     else => key_event.key = .{ .code = code },
                 }
-                if (code == cc.bs) {
-                    key_event.key = .backspace;
-                } else {
-                    key_event.key = .{ .code = code };
-                }
             } else {
                 key_event.key = .{ .non_ascii = code };
             }
