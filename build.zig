@@ -64,7 +64,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_main_tests.step);
 
     const examples_step = b.step("examples", "Build examples");
-    const examples: []const []const u8 = &.{"event"};
+    const examples = &[_][]const u8{ "event", "paint" };
     for (examples) |name| {
         const example = b.addExecutable(.{
             .name = name,
