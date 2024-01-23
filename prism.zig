@@ -105,16 +105,16 @@ pub const Mouse = enum {
     }
 };
 
+pub const Size = struct {
+    width: u16,
+    height: u16,
+};
+
 pub const Terminal = struct {
     const os = std.os;
     const sys = os.system;
     const File = std.fs.File;
     const Self = @This();
-
-    pub const Size = struct {
-        width: u16,
-        height: u16,
-    };
 
     canonical: os.termios,
     raw: os.termios,
