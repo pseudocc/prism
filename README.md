@@ -24,3 +24,9 @@ a simple widget (redraw after state changes).
 [Terminal Guide](https://terminalguide.namepad.de/)
 
 [Entering raw mode](https://viewsourcecode.org/snaptoken/kilo/02.enteringRawMode.html)
+
+## Nonsense
+
+I was thinking of creating a UI module that provides layout managements 
+and common widgets, but it would be pretty complicated for the users, and
+I would like to make things simple, so that plan was dropped.
