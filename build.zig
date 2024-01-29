@@ -55,7 +55,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     for (prism_deps) |dep| {
-        lib.addModule(dep.name, dep.module);
+        main_tests.addModule(dep.name, dep.module);
     }
 
     const run_main_tests = b.addRunArtifact(main_tests);
