@@ -5,35 +5,22 @@ const csi = @import("prism.csi");
 pub const Cursor = union(enum) {
     const Self = @This();
 
-    /// Cursor Up (CUU)
     up: u16,
-    /// Cursor Down (CUD)
     down: u16,
-    /// Cursor Right (CUF)
     right: u16,
-    /// Cursor Left (CUB)
     left: u16,
-    /// Cursor Position (CUP)
     goto: struct {
         x: u16 = 0,
         y: u16 = 0,
     },
-    /// Cursor Horizontal Position Absolute (HPA)
     column: u16,
-    /// Cursor Vertical Position Absolute (VPA)
     row: u16,
-    /// Cursor Next Line (CNL)
     next: u16,
-    /// Cursor Previous Line (CPL)
     prev: u16,
-    /// Save Cursor (DECSC)
     save: void,
-    /// Restore Cursor (DECRC)
     restore: void,
 
-    /// Cursor Visibility Show (DECTCEM)
     show: void,
-    /// Cursor Visibility Hide (DECTCEM)
     hide: void,
 
     pub fn format(
@@ -155,61 +142,106 @@ pub const Cursor = union(enum) {
     };
 };
 
+/// Cursor Up (CUU)
+/// Move the cursor up N lines.
+/// Under the hood: `ESC [ <N> A`
 pub inline fn up(n: u16) Cursor {
     return .{ .up = n };
 }
 
+/// Cursor Down (CUD)
+/// Move the cursor down N lines.
+/// Under the hood: `ESC [ <N> B`
 pub inline fn down(n: u16) Cursor {
     return .{ .down = n };
 }
 
+/// Cursor Right (CUF)
+/// Move the cursor to the right N columns.
+/// Under the hood: `ESC [ <N> C`
 pub inline fn right(n: u16) Cursor {
     return .{ .right = n };
 }
 
+/// Cursor Left (CUB)
+/// Move the cursor to the left N columns.
+/// Under the hood: `ESC [ <N> D`
 pub inline fn left(n: u16) Cursor {
     return .{ .left = n };
 }
 
+/// Cursor Position (CUP)
+/// Move the cursor to row X, column Y.
+/// Under the hood: `ESC [ <X> ; <Y> H`
 pub inline fn goto(x: u16, y: u16) Cursor {
     return .{ .goto = .{ .x = x, .y = y } };
 }
 
+/// Cursor Horizontal Position Absolute (HPA)
+/// Move the cursor to the column N, row is unchanged.
+/// Under the hood: ``ESC [ <N> `\``
 pub inline fn column(n: u16) Cursor {
     return .{ .column = n };
 }
 
+/// Cursor Vertical Position Absolute (VPA)
+/// Move the cursor to the row N, column is unchanged.
+/// Under the hood: `ESC [ <N> d`
 pub inline fn row(n: u16) Cursor {
     return .{ .row = n };
 }
 
+/// Cursor Next Line (CNL)
+/// Move cursor to next N line(s).
+/// Under the hood: `ESC [ <N> E`
 pub inline fn next(n: u16) Cursor {
     return .{ .next = n };
 }
 
+/// Cursor Previous Line (CPL)
+/// Move cursor to previous N line(s).
+/// Under the hood: `ESC [ <N> F`
 pub inline fn prev(n: u16) Cursor {
     return .{ .prev = n };
 }
 
+/// Save Cursor (DECSC)
+/// Save cursor position and further state.
+/// Under the hood: `ESC 7`
 pub const save: Cursor = .save;
 
+/// Restore Cursor (DECRC)
+/// Restore cursor position and further state.
+/// Under the hood: `ESC 8`
 pub const restore: Cursor = .restore;
 
+/// Cursor Visibility (DECTCEM)
+/// Under the hood: `ESC [ ?25h`
 pub const show: Cursor = .show;
 
+/// Cursor Visibility (DECTCEM)
+/// Under the hood: `ESC [ ?25l`
 pub const hide: Cursor = .hide;
 
+/// Set Cursor Style (DECSCUSR)
 pub const style = struct {
     pub const default: Cursor.Style = .default;
 
+    /// Select Cursor Style Blinking/Steady Block
+    /// Example: `style.block(.blink)` or `style.block(.steady)`
+    /// Under the hood: `ESC [ <n> q`
     pub inline fn block(h: Cursor.Highlight) Cursor.Style {
         return .{ .block = h };
     }
 
+    /// Select Cursor Style Blinking/Steady Underline
+    /// Example: `style.block(.blink)` or `style.block(.steady)`
     pub inline fn underline(h: Cursor.Highlight) Cursor.Style {
         return .{ .underline = h };
     }
 
+    /// Select Cursor Style Blinking/Steady Bar
+    /// Example: `style.block(.blink)` or `style.block(.steady)`
     pub inline fn bar(h: Cursor.Highlight) Cursor.Style {
         return .{ .bar = h };
     }
@@ -218,11 +250,15 @@ pub const style = struct {
 /// Scroll Up (SU) / Scroll Down (SD)
 pub const scroll = struct {
     /// Scroll Up (SU)
+    /// Scroll the page up N lines.
+    /// Under the hood: `ESC [ <N> S`
     pub inline fn up(n: u16) Cursor.Scroll {
         return .{ .up = n };
     }
 
     /// Scroll Down (SD)
+    /// Scroll the page down N lines.
+    /// Under the hood: `ESC [ <N> T`
     pub inline fn down(n: u16) Cursor.Scroll {
         return .{ .down = n };
     }
