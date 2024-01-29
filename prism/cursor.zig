@@ -89,10 +89,10 @@ pub const Cursor = union(enum) {
                 return writer.writeAll(csi.ct("8"));
             },
             .show => {
-                return writer.writeAll(csi.ct("?25h"));
+                return writer.writeAll(csi.ct("[?25h"));
             },
             .hide => {
-                return writer.writeAll(csi.ct("?25l"));
+                return writer.writeAll(csi.ct("[?25l"));
             },
         }
     }
