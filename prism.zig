@@ -653,6 +653,7 @@ pub const wrap = struct {
 };
 
 /// Alternate Screen Buffer (ALTBUF) With Cursor Save and Clear on Enter
+/// Note: some terminals will not move the cursor to the top left corner.
 /// Default: primary screen buffer.
 pub const altscreen = struct {
     pub const enter: AltScreen = .enter;
