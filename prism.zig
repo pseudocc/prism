@@ -115,11 +115,14 @@ pub const Terminal = struct {
     const sys = os.system;
     const File = std.fs.File;
     const Self = @This();
+    const BufferedWriter = std.io.BufferedWriter(4096, File.Writer);
 
     canonical: os.termios,
     raw: os.termios,
     raw_enabled: bool = false,
     file: File,
+
+    buffered: BufferedWriter,
 
     pub fn init(file: File) !Terminal {
         const fd = file.handle;
@@ -140,6 +143,7 @@ pub const Terminal = struct {
             .canonical = canonical,
             .raw = raw,
             .file = file,
+            .buffered = .{ .unbuffered_writer = file.writer() },
         };
     }
 
@@ -170,14 +174,28 @@ pub const Terminal = struct {
         };
     }
 
-    pub inline fn write(self: *Self, data: anytype) !void {
+    pub inline fn unbufferedWrite(self: *Self, data: anytype) !void {
         var writer = self.file.writer();
         try writer.print("{s}", .{data});
     }
 
-    pub inline fn print(self: *Self, comptime fmt: []const u8, args: anytype) !void {
+    pub inline fn unbufferedPrint(self: *Self, comptime fmt: []const u8, args: anytype) !void {
         var writer = self.file.writer();
         try writer.print(fmt, args);
+    }
+
+    pub inline fn write(self: *Self, data: anytype) !void {
+        var writer = self.buffered.writer();
+        try writer.print("{s}", .{data});
+    }
+
+    pub inline fn print(self: *Self, comptime fmt: []const u8, args: anytype) !void {
+        var writer = self.buffered.writer();
+        try writer.print(fmt, args);
+    }
+
+    pub inline fn flush(self: *Self) !void {
+        try self.buffered.flush();
     }
 
     pub const Event = union(enum) {

@@ -25,6 +25,7 @@ pub fn main() !void {
         term.disableRaw() catch {};
         term.write(altscreen.leave) catch {};
         term.write(mouse.untrack) catch {};
+        term.flush() catch {};
     }
 
     var reader = Terminal.EventReader{ .file = file };
@@ -77,5 +78,6 @@ pub fn main() !void {
             },
             else => {},
         }
+        try term.flush();
     }
 }

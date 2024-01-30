@@ -115,6 +115,7 @@ pub fn main() !void {
         term.disableRaw() catch {};
         term.write(altscreen.leave) catch {};
         term.write(cursor.show) catch {};
+        term.flush() catch {};
     }
 
     var last = std.time.milliTimestamp();
@@ -145,6 +146,7 @@ pub fn main() !void {
 
             try clear(&term);
             try w.draw(&term);
+            try term.flush();
         }
     }
 }
