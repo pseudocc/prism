@@ -96,7 +96,6 @@ pub const Cursor = union(enum) {
         steady,
     };
 
-    /// Cursor Style (DECSCUSR)
     pub const Style = union(Shape) {
         default: void,
         block: Highlight,
