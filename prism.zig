@@ -202,6 +202,8 @@ pub const Terminal = struct {
         /// Mouse event.
         /// Only sent when mouse tracking is enabled.
         mouse: MouseEvent,
+        /// Cursor position
+        position: common.Point,
         /// Unknown event, value is not allcated.
         /// If you need to store the value, make a copy.
         unknown: []const u8,
@@ -223,6 +225,11 @@ pub const Terminal = struct {
                     try std.fmt.format(writer, "Unicode: {s}", .{buffer[0..l]});
                 },
                 .mouse => try std.fmt.format(writer, "Mouse::{s}", .{self.mouse}),
+                .position => try std.fmt.format(
+                    writer,
+                    "Position: ({d}, {d})",
+                    .{ self.position.x, self.position.y },
+                ),
                 .unknown => |data| {
                     try writer.writeAll("Unknown: ");
                     try puts(writer, data);
@@ -615,7 +622,7 @@ pub const Terminal = struct {
 
             if (end != processed and data[0] == cc.esc) {
                 processed = end;
-                event.* = .{ .unknown = data[0..end] };
+                event.* = process_other(data[0..end]);
             }
 
             return processed;
@@ -643,6 +650,30 @@ pub const Terminal = struct {
                     return processed;
                 },
             }
+        }
+
+        fn process_other(data: []const u8) Event {
+            const unknown: Event = .{ .unknown = data };
+            if (data.len < 4 or data[1] != '[') {
+                return unknown;
+            }
+
+            const code = data[data.len - 1];
+            switch (code) {
+                'R' => {
+                    const maybe_semi = std.mem.indexOfPos(u8, data, 2, ";");
+                    if (maybe_semi) |semi| {
+                        const rowstr = data[2..semi];
+                        const colstr = data[semi + 1 .. data.len - 1];
+                        const y = std.fmt.parseInt(u16, rowstr, 10) catch return unknown;
+                        const x = std.fmt.parseInt(u16, colstr, 10) catch return unknown;
+                        return .{ .position = .{ .x = x, .y = y } };
+                    }
+                },
+                else => {},
+            }
+
+            return unknown;
         }
     };
 };

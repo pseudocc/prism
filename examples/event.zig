@@ -7,10 +7,14 @@ const cursor = prism.cursor;
 const mouse = prism.mouse;
 const edit = prism.edit;
 
+const REQPOS = 50;
+
 fn clear(term: *Terminal) !void {
-    try term.print("{s}{s}:q - quit\t:c - clear\r\n", .{
+    try term.print("{s}{s}:q - quit\t:c - clear\r\n" ++
+        "Report cursor position every {d} idles\r\n", .{
         edit.erase.display(.both),
         cursor.goto(1, 1),
+        REQPOS,
     });
 }
 
@@ -48,6 +52,9 @@ pub fn main() !void {
             }
             idles += 1;
             try term.print("{s} x {d}\r\n", .{ event, idles });
+            if (idles > REQPOS) {
+                try term.unbufferedWrite(cursor.reqpos);
+            }
         }
         switch (event) {
             .key => |e| {
