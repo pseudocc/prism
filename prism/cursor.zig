@@ -1,6 +1,7 @@
 const std = @import("std");
 const testing = std.testing;
 const csi = @import("prism.csi");
+const common = @import("prism.common");
 
 pub const Cursor = union(enum) {
     const Self = @This();
@@ -9,10 +10,7 @@ pub const Cursor = union(enum) {
     down: u16,
     right: u16,
     left: u16,
-    goto: struct {
-        x: u16 = 0,
-        y: u16 = 0,
-    },
+    goto: common.Point,
     column: u16,
     row: u16,
     next: u16,
@@ -176,6 +174,13 @@ pub inline fn goto(x: u16, y: u16) Cursor {
     return .{ .goto = .{ .x = x, .y = y } };
 }
 
+/// Cursor Position (CUP)
+/// Move the cursor to row P.X, column P.Y.
+/// Under the hood: `ESC [ <P.X> ; <P.Y> H`
+pub inline fn gotoPoint(p: common.Point) Cursor {
+    return .{ .goto = p };
+}
+
 /// Cursor Horizontal Position Absolute (HPA)
 /// Move the cursor to the column N, row is unchanged.
 /// Under the hood: ``ESC [ <N> `\``
@@ -284,7 +289,7 @@ test "cursor.goto" {
     try test_any(goto(0, 2), "\x1b[2d");
     try test_any(goto(1, 1), "\x1b[;H");
     try test_any(goto(2, 1), "\x1b[;2H");
-    try test_any(goto(1, 2), "\x1b[2;H");
+    try test_any(gotoPoint(.{ .x = 1, .y = 2 }), "\x1b[2;H");
     try test_any(goto(2, 4), "\x1b[4;2H");
 }
 

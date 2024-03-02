@@ -1,6 +1,7 @@
 const std = @import("std");
 const csi = @import("prism.csi");
 
+pub const common = @import("prism.common");
 pub const cursor = @import("prism.cursor");
 pub const edit = @import("prism.edit");
 pub const graphic = @import("prism.graphic");
@@ -105,11 +106,6 @@ pub const Mouse = enum {
     }
 };
 
-pub const Size = struct {
-    width: u16,
-    height: u16,
-};
-
 pub const Terminal = struct {
     const os = std.os;
     const sys = os.system;
@@ -161,7 +157,7 @@ pub const Terminal = struct {
         self.raw_enabled = false;
     }
 
-    pub fn size(self: *Self) !Size {
+    pub fn size(self: *Self) !common.Size {
         var sz: sys.winsize = undefined;
         const fd = self.file.handle;
         const code = sys.ioctl(fd, sys.T.IOCGWINSZ, @intFromPtr(&sz));

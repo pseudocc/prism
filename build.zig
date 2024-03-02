@@ -7,10 +7,14 @@ pub fn build(b: *std.Build) void {
     const csi = b.createModule(.{
         .source_file = .{ .path = "utils/csi.zig" },
     });
+    const common = b.addModule("prism.common", .{
+        .source_file = .{ .path = "prism/common.zig" },
+    });
     const cursor = b.addModule("prism.cursor", .{
         .source_file = .{ .path = "prism/cursor.zig" },
         .dependencies = &.{
             .{ .name = "prism.csi", .module = csi },
+            .{ .name = "prism.common", .module = common },
         },
     });
     const edit = b.addModule("prism.edit", .{
@@ -28,6 +32,7 @@ pub fn build(b: *std.Build) void {
 
     const prism_deps: []const std.build.ModuleDependency = &.{
         .{ .name = "prism.csi", .module = csi },
+        .{ .name = "prism.common", .module = common },
         .{ .name = "prism.cursor", .module = cursor },
         .{ .name = "prism.edit", .module = edit },
         .{ .name = "prism.graphic", .module = graphic },
