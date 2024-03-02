@@ -203,7 +203,7 @@ pub const Terminal = struct {
         key: KeyEvent,
         /// Unicode code point.
         unicode: u21,
-        /// Mouse event.o
+        /// Mouse event.
         /// Only sent when mouse tracking is enabled.
         mouse: MouseEvent,
         /// Unknown event, value is not allcated.
@@ -617,7 +617,6 @@ pub const Terminal = struct {
             processed = process_key(data[0..end], &key_event);
             event.* = .{ .key = key_event };
 
-            // mouse event workaround
             if (end != processed and data[0] == cc.esc) {
                 processed = end;
                 event.* = .{ .unknown = data[0..end] };
