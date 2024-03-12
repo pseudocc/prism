@@ -322,10 +322,13 @@ pub const Terminal = struct {
                             'P' => .{ .f = 1 },
                             'Q' => .{ .f = 2 },
                             'S' => .{ .f = 4 },
-                            'u' => .{ .unhandled = .{
-                                .u = try std.fmt.parseInt(u16, data[2..end], 10),
-                            } },
-
+                            'u' => this: {
+                                const kind = try std.fmt.parseInt(u8, data[2..end], 10);
+                                break :this switch (kind) {
+                                    127 => .backspace,
+                                    else => .{ .unhandled = .{ .u = kind } },
+                                };
+                            },
                             '~' => this: {
                                 const kind = try std.fmt.parseInt(u8, data[2..end], 10);
                                 break :this switch (kind) {
