@@ -15,25 +15,34 @@ fn validateAge(value: []const u8) ?[]const u8 {
     return null;
 }
 
+const stdout = std.io.getStdOut().writer();
+
+inline fn handleInterrupt(e: anyerror) !void {
+    if (e == error.Interrupted) {
+        try stdout.writeAll("CTRL+C received, exiting...\n");
+        return;
+    }
+    return e;
+}
+
 pub fn main() !void {
-    var stdout = std.io.getStdOut().writer();
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
 
     var allocator = gpa.allocator();
-    const name = try prompt.input.allocated(allocator, .{
+    const name = prompt.input.allocated(allocator, .{
         .question = "What is your name",
         .default = "Nobody",
-    });
+    }) catch |e| return handleInterrupt(e);
     defer allocator.free(name);
     try stdout.print("Hello, {s}.\n", .{name});
 
     var buffer: [16]u8 = undefined;
-    const n = try prompt.input.buffered(&buffer, .{
+    const n = prompt.input.buffered(&buffer, .{
         .question = "What is your age",
         .default = "30",
         .validate = &validateAge,
-    });
+    }) catch |e| return handleInterrupt(e);
     const ageString = buffer[0..n];
     const age = std.fmt.parseInt(u8, ageString, 10) catch unreachable;
     const message = switch (age) {
