@@ -42,6 +42,13 @@ pub fn build(b: *std.Build) void {
         .dependencies = prism_deps,
     });
 
+    const prompt = b.addModule("prism.prompt", .{
+        .source_file = .{ .path = "prism/prompt.zig" },
+        .dependencies = &.{
+            .{ .name = "prism", .module = prism },
+        },
+    });
+
     var lib = b.addStaticLibrary(.{
         .name = "prism",
         .root_source_file = .{ .path = "prism.zig" },
@@ -69,7 +76,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_main_tests.step);
 
     const examples_step = b.step("examples", "Build examples");
-    const examples = &[_][]const u8{ "event", "widget" };
+    const examples = &[_][]const u8{ "event", "widget", "prompt" };
     for (examples) |name| {
         const example = b.addExecutable(.{
             .name = name,
@@ -79,6 +86,7 @@ pub fn build(b: *std.Build) void {
         });
         const install_example = b.addInstallArtifact(example, .{});
         example.addModule("prism", prism);
+        example.addModule("prism.prompt", prompt);
         examples_step.dependOn(&example.step);
         examples_step.dependOn(&install_example.step);
     }
