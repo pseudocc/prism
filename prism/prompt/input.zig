@@ -225,7 +225,14 @@ fn interm(options: Options) !std.ArrayList(u21) {
             else => {},
         }
 
-        if (maybe_invalid) |message| {
+        if (vdelay == VDELAY) {
+            try t.print("{s}{s}{s}", .{
+                prism.cursor.next(1),
+                prism.edit.erase.line(.both),
+                prism.cursor.restore,
+            });
+            maybe_invalid = null;
+        } else if (maybe_invalid) |message| {
             try t.print("{s}{s}{s}{s}{s}", .{
                 prism.cursor.next(1),
                 prism.edit.erase.line(.both),
