@@ -189,6 +189,12 @@ fn interm(options: Options) !std.ArrayList(u21) {
                             try input.insert(cursor, c);
                             cursor += 1;
                             vdelay = VDELAY;
+                        } else if (std.ascii.isControl(c)) {
+                            switch (c) {
+                                std.ascii.control_code.etx => return error.Interrupted,
+                                std.ascii.control_code.eot => return error.Aborted,
+                                else => {},
+                            }
                         }
                     },
                     .home => cursor = 0,
