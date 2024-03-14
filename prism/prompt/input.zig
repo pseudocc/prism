@@ -81,13 +81,21 @@ fn term() !prism.Terminal {
     return _term;
 }
 
-fn validate_wrapper(string: []const u21, maybe_validate: ?Options.Validator) !?[]const u8 {
+fn validate_wrapper(
+    string: []const u21,
+    default: ?[]const u8,
+    maybe_validate: ?Options.Validator,
+) !?[]const u8 {
     var validate = maybe_validate orelse return null;
     var allocator = std.heap.page_allocator;
     var count: usize = 0;
     for (string) |c| {
         const l = std.unicode.utf8CodepointSequenceLength(c) catch unreachable;
         count += l;
+    }
+
+    if (count == 0) {
+        return validate(default orelse "");
     }
 
     var buffer = try allocator.alloc(u8, count);
@@ -168,7 +176,7 @@ pub fn allocated(allocator: Allocator, options: Options) ![]const u8 {
                 if (vdelay > 0) {
                     vdelay -= 1;
                     if (vdelay == 0) {
-                        maybe_invalid = try validate_wrapper(input.items, options.validate);
+                        maybe_invalid = try validate_wrapper(input.items, options.default, options.validate);
                     }
                 }
             },
@@ -201,7 +209,7 @@ pub fn allocated(allocator: Allocator, options: Options) ![]const u8 {
                         }
                     },
                     .enter => {
-                        maybe_invalid = try validate_wrapper(input.items, options.validate);
+                        maybe_invalid = try validate_wrapper(input.items, options.default, options.validate);
                         confirmed = true;
                     },
                     else => {},
