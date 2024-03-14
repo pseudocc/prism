@@ -82,6 +82,7 @@ fn term() !prism.Terminal {
 }
 
 fn validate_wrapper(string: []const u21, maybe_validate: ?Options.Validator) !?[]const u8 {
+    var validate = maybe_validate orelse return null;
     var allocator = std.heap.page_allocator;
     var count: usize = 0;
     for (string) |c| {
@@ -98,11 +99,7 @@ fn validate_wrapper(string: []const u21, maybe_validate: ?Options.Validator) !?[
         pos += l;
     }
 
-    if (maybe_validate) |validate| {
-        return validate(buffer);
-    }
-
-    return null;
+    return validate(buffer);
 }
 
 fn moveLeft(input: std.ArrayList(u21), cursor: u16, ctrl: bool) u16 {
