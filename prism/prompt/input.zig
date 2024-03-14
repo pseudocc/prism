@@ -162,10 +162,12 @@ fn interm(options: Options) !std.ArrayList(u21) {
 
     errdefer input.deinit();
 
-    try t.print("{s}{s}{s}{s}", .{
+    // "\n + up(1)" will preserve a newline for the error message
+    try t.print("{s}{s}{s}\n{s}{s}", .{
         question_style.before.?,
         options.question,
         question_style.after.?,
+        prism.cursor.up(1),
         prism.cursor.save,
     });
 
