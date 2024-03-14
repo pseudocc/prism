@@ -279,3 +279,31 @@ pub fn allocated(allocator: Allocator, options: Options) ![]const u8 {
 
     return result.toOwnedSlice();
 }
+
+pub fn buffered(dest: []u8, options: Options) !usize {
+    var input = try interm(options);
+    defer input.deinit();
+
+    if (input.items.len == 0 and options.default != null) {
+        const result = options.default.?;
+        const n = result.len;
+        if (n > dest.len) {
+            return error.BufferTooSmall;
+        }
+        @memcpy(dest[0..n], result);
+        return n;
+    }
+
+    var i: usize = 0;
+    for (input.items) |c| {
+        var buffer: [4]u8 = undefined;
+        const n = std.unicode.utf8Encode(c, &buffer) catch unreachable;
+        if (i + n > dest.len) {
+            return error.BufferTooSmall;
+        }
+        @memcpy(dest[i .. i + n], buffer[0..n]);
+        i += n;
+    }
+
+    return i;
+}
