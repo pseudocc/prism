@@ -139,7 +139,7 @@ fn moveRight(input: std.ArrayList(u21), cursor: u16, ctrl: bool) u16 {
     return @min(move, input.items.len - cursor);
 }
 
-pub fn allocated(allocator: Allocator, options: Options) ![]const u8 {
+fn interm(options: Options) !std.ArrayList(u21) {
     var t = try term();
     var r = prism.Terminal.EventReader{ .file = t.file };
     try t.enableRaw();
@@ -153,6 +153,7 @@ pub fn allocated(allocator: Allocator, options: Options) ![]const u8 {
     const invalid_style = Style.origin.invalid.fill(options.theme.invalid);
 
     const VDELAY = 5;
+    var allocator = std.heap.page_allocator;
     var input = std.ArrayList(u21).init(allocator);
     var maybe_invalid: ?[]const u8 = null;
     var vdelay: usize = VDELAY;
@@ -160,7 +161,6 @@ pub fn allocated(allocator: Allocator, options: Options) ![]const u8 {
     var confirmed = false;
 
     errdefer input.deinit();
-    defer input.deinit();
 
     try t.print("{s}{s}{s}{s}", .{
         question_style.before.?,
@@ -258,6 +258,13 @@ pub fn allocated(allocator: Allocator, options: Options) ![]const u8 {
 
         try t.flush();
     }
+
+    return input;
+}
+
+pub fn allocated(allocator: Allocator, options: Options) ![]const u8 {
+    var input = try interm(options);
+    defer input.deinit();
 
     if (input.items.len == 0 and options.default != null) {
         return try allocator.dupe(u8, options.default.?);
