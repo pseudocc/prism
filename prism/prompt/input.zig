@@ -110,13 +110,13 @@ fn validate_wrapper(
     return validate(buffer);
 }
 
-fn moveLeft(input: std.ArrayList(u21), cursor: u16, ctrl: bool) u16 {
+fn moveLeft(items: []const u21, cursor: u16, ctrl: bool) u16 {
     if (!ctrl or cursor <= 1) {
         return @min(cursor, 1);
     }
     var move: u16 = 1;
     while (cursor - move > 0) : (move += 1) {
-        const c = input.items[cursor - move - 1];
+        const c = items[cursor - move - 1];
         if (c == @as(u21, ' ')) {
             break;
         }
@@ -124,19 +124,19 @@ fn moveLeft(input: std.ArrayList(u21), cursor: u16, ctrl: bool) u16 {
     return move;
 }
 
-fn moveRight(input: std.ArrayList(u21), cursor: u16, ctrl: bool) u16 {
-    if (!ctrl or input.items.len - cursor <= 1) {
-        return @min(input.items.len - cursor, 1);
+fn moveRight(items: []const u21, cursor: u16, ctrl: bool) u16 {
+    if (!ctrl or items.len - cursor <= 1) {
+        return @min(items.len - cursor, 1);
     }
     var move: u16 = 0;
-    while (cursor + move < input.items.len) : (move += 1) {
-        const c = input.items[cursor + move];
+    while (cursor + move < items.len) : (move += 1) {
+        const c = items[cursor + move];
         if (c == @as(u21, ' ')) {
             move += 1;
             break;
         }
     }
-    return @min(move, input.items.len - cursor);
+    return @min(move, items.len - cursor);
 }
 
 fn interm(options: Options) !std.ArrayList(u21) {
@@ -192,18 +192,18 @@ fn interm(options: Options) !std.ArrayList(u21) {
                         }
                     },
                     .home => cursor = 0,
-                    .left => cursor -= moveLeft(input, cursor, e.modifiers.ctrl),
+                    .left => cursor -= moveLeft(input.items, cursor, e.modifiers.ctrl),
                     .end => cursor = @intCast(input.items.len),
-                    .right => cursor += moveRight(input, cursor, e.modifiers.ctrl),
+                    .right => cursor += moveRight(input.items, cursor, e.modifiers.ctrl),
                     .delete => {
-                        const move = moveRight(input, cursor, e.modifiers.ctrl);
+                        const move = moveRight(input.items, cursor, e.modifiers.ctrl);
                         if (move > 0) {
                             try input.replaceRange(cursor, move, &.{});
                             vdelay = VDELAY;
                         }
                     },
                     .backspace => {
-                        const move = moveLeft(input, cursor, e.modifiers.ctrl);
+                        const move = moveLeft(input.items, cursor, e.modifiers.ctrl);
                         if (move > 0) {
                             try input.replaceRange(cursor - move, move, &.{});
                             cursor -= move;
