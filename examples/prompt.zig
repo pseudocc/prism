@@ -30,7 +30,7 @@ pub fn main() !void {
     defer _ = gpa.deinit();
 
     var allocator = gpa.allocator();
-    const name = prompt.input.allocated(allocator, .{
+    const name = prompt.input.text.allocated(allocator, .{
         .question = "What is your name",
         .default = "Nobody",
     }) catch |e| return handleInterrupt(e);
@@ -38,7 +38,7 @@ pub fn main() !void {
     try stdout.print("Hello, {s}.\n", .{name});
 
     var buffer: [16]u8 = undefined;
-    const n = prompt.input.buffered(&buffer, .{
+    const n = prompt.input.text.buffered(&buffer, .{
         .question = "What is your age",
         .default = "30",
         .validate = &validateAge,
