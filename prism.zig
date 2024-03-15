@@ -565,6 +565,17 @@ pub const Terminal = struct {
         buffer: [BUFFER_SIZE]u8 = undefined,
         offset: usize = 0,
 
+        pub fn reset(self: *EventReader) !void {
+            self.offset = 0;
+            var reader = self.file.reader();
+            while (true) {
+                reader.skipBytes(std.mem.page_size, .{}) catch |e| switch (e) {
+                    error.EndOfStream => return,
+                    else => return e,
+                };
+            }
+        }
+
         pub fn read(self: *EventReader) !Event {
             var event: Event = undefined;
             var processed: usize = undefined;
