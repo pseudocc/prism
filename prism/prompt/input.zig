@@ -117,7 +117,8 @@ fn moveLeft(items: []const u21, cursor: u16, ctrl: bool) u16 {
     var move: u16 = 1;
     while (cursor - move > 0) : (move += 1) {
         const c = items[cursor - move - 1];
-        if (c == @as(u21, ' ')) {
+        const n = std.unicode.utf8CodepointSequenceLength(c) catch unreachable;
+        if (n == 1 and !std.ascii.isAlphanumeric(@intCast(c))) {
             break;
         }
     }
@@ -131,7 +132,8 @@ fn moveRight(items: []const u21, cursor: u16, ctrl: bool) u16 {
     var move: u16 = 0;
     while (cursor + move < items.len) : (move += 1) {
         const c = items[cursor + move];
-        if (c == @as(u21, ' ')) {
+        const n = std.unicode.utf8CodepointSequenceLength(c) catch unreachable;
+        if (n == 1 and !std.ascii.isAlphanumeric(@intCast(c))) {
             move += 1;
             break;
         }
