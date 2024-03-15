@@ -18,30 +18,44 @@ fn term() !prism.Terminal {
     return _term;
 }
 
-fn moveLeft(items: []const u21, cursor: u16, ctrl: bool) u16 {
+fn moveLeft(comptime T: type, items: []const T, cursor: u16, ctrl: bool) u16 {
     if (!ctrl or cursor <= 1) {
         return @min(cursor, 1);
     }
     var move: u16 = 1;
     while (cursor - move > 0) : (move += 1) {
-        const c = items[cursor - move - 1];
-        const n = std.unicode.utf8CodepointSequenceLength(c) catch unreachable;
-        if (n == 1 and !std.ascii.isAlphanumeric(@intCast(c))) {
+        const item = items[cursor - move - 1];
+        const sentinel: u8 = switch (T) {
+            u8 => item,
+            u21 => this: {
+                const n = std.unicode.utf8CodepointSequenceLength(item) catch unreachable;
+                break :this if (n == 1) @intCast(item) else std.ascii.control_code.nul;
+            },
+            else => unreachable,
+        };
+        if (!std.ascii.isAlphanumeric(sentinel)) {
             break;
         }
     }
     return move;
 }
 
-fn moveRight(items: []const u21, cursor: u16, ctrl: bool) u16 {
+fn moveRight(comptime T: type, items: []const T, cursor: u16, ctrl: bool) u16 {
     if (!ctrl or items.len - cursor <= 1) {
         return @min(items.len - cursor, 1);
     }
     var move: u16 = 0;
     while (cursor + move < items.len) : (move += 1) {
-        const c = items[cursor + move];
-        const n = std.unicode.utf8CodepointSequenceLength(c) catch unreachable;
-        if (n == 1 and !std.ascii.isAlphanumeric(@intCast(c))) {
+        const item = items[cursor + move];
+        const sentinel: u8 = switch (T) {
+            u8 => item,
+            u21 => this: {
+                const n = std.unicode.utf8CodepointSequenceLength(item) catch unreachable;
+                break :this if (n == 1) @intCast(item) else std.ascii.control_code.nul;
+            },
+            else => unreachable,
+        };
+        if (!std.ascii.isAlphanumeric(sentinel)) {
             move += 1;
             break;
         }
@@ -97,6 +111,11 @@ pub const text = struct {
         }
     };
 
+    pub const Variant = enum {
+        ascii,
+        unicode,
+    };
+
     pub const Theme = struct {
         question: ?Style = null,
         default: ?Style = null,
@@ -114,22 +133,34 @@ pub const text = struct {
     };
 
     fn validate_wrapper(
-        string: []const u21,
+        comptime T: type,
+        string: []const T,
         default: ?[]const u8,
         maybe_validate: ?Options.Validator,
     ) !?[]const u8 {
         var validate = maybe_validate orelse return null;
-        var allocator = std.heap.page_allocator;
-        var count: usize = 0;
-        for (string) |c| {
-            const l = std.unicode.utf8CodepointSequenceLength(c) catch unreachable;
-            count += l;
-        }
+        const count = switch (T) {
+            u8 => string.len,
+            u21 => this: {
+                var n: usize = 0;
+                for (string) |c| {
+                    const l = std.unicode.utf8CodepointSequenceLength(c) catch unreachable;
+                    n += l;
+                }
+                break :this n;
+            },
+            else => unreachable,
+        };
 
         if (count == 0) {
             return validate(default orelse "");
         }
 
+        if (T == u8) {
+            return validate(string);
+        }
+
+        var allocator = std.heap.page_allocator;
         var buffer = try allocator.alloc(u8, count);
         var pos: usize = 0;
         defer allocator.free(buffer);
@@ -142,7 +173,12 @@ pub const text = struct {
         return validate(buffer);
     }
 
-    fn interm(options: Options) !std.ArrayList(u21) {
+    fn interm(comptime T: type, options: Options) !std.ArrayList(T) {
+        switch (T) {
+            u8, u21 => {},
+            else => @compileError("unsupported type"),
+        }
+
         var t = try term();
         var r = prism.Terminal.EventReader{ .file = t.file };
         try t.enableRaw();
@@ -157,7 +193,7 @@ pub const text = struct {
 
         const VDELAY = 5;
         var allocator = std.heap.page_allocator;
-        var input = std.ArrayList(u21).init(allocator);
+        var input = std.ArrayList(T).init(allocator);
         var maybe_invalid: ?[]const u8 = null;
         var vdelay: usize = VDELAY;
         var cursor: u16 = 0;
@@ -181,7 +217,7 @@ pub const text = struct {
                     if (vdelay > 0) {
                         vdelay -= 1;
                         if (vdelay == 0) {
-                            maybe_invalid = try validate_wrapper(input.items, options.default, options.validate);
+                            maybe_invalid = try validate_wrapper(T, input.items, options.default, options.validate);
                         }
                     }
                 },
@@ -201,18 +237,18 @@ pub const text = struct {
                             }
                         },
                         .home => cursor = 0,
-                        .left => cursor -= moveLeft(input.items, cursor, e.modifiers.ctrl),
+                        .left => cursor -= moveLeft(T, input.items, cursor, e.modifiers.ctrl),
                         .end => cursor = @intCast(input.items.len),
-                        .right => cursor += moveRight(input.items, cursor, e.modifiers.ctrl),
+                        .right => cursor += moveRight(T, input.items, cursor, e.modifiers.ctrl),
                         .delete => {
-                            const move = moveRight(input.items, cursor, e.modifiers.ctrl);
+                            const move = moveRight(T, input.items, cursor, e.modifiers.ctrl);
                             if (move > 0) {
                                 try input.replaceRange(cursor, move, &.{});
                                 vdelay = VDELAY;
                             }
                         },
                         .backspace => {
-                            const move = moveLeft(input.items, cursor, e.modifiers.ctrl);
+                            const move = moveLeft(T, input.items, cursor, e.modifiers.ctrl);
                             if (move > 0) {
                                 try input.replaceRange(cursor - move, move, &.{});
                                 cursor -= move;
@@ -220,16 +256,18 @@ pub const text = struct {
                             }
                         },
                         .enter => {
-                            maybe_invalid = try validate_wrapper(input.items, options.default, options.validate);
+                            maybe_invalid = try validate_wrapper(T, input.items, options.default, options.validate);
                             confirmed = true;
                         },
                         else => {},
                     }
                 },
                 .unicode => |c| {
-                    try input.insert(cursor, c);
-                    cursor += 1;
-                    vdelay = VDELAY;
+                    if (T == u21) {
+                        try input.insert(cursor, c);
+                        cursor += 1;
+                        vdelay = VDELAY;
+                    }
                 },
                 else => {},
             }
@@ -280,8 +318,11 @@ pub const text = struct {
         return input;
     }
 
-    pub fn allocated(allocator: Allocator, options: Options) ![]const u8 {
-        var input = try interm(options);
+    pub fn allocated(comptime v: Variant, allocator: Allocator, options: Options) ![]const u8 {
+        var input = switch (v) {
+            .ascii => try interm(u8, options),
+            .unicode => try interm(u21, options),
+        };
         defer input.deinit();
 
         if (input.items.len == 0 and options.default != null) {
@@ -298,31 +339,41 @@ pub const text = struct {
         return result.toOwnedSlice();
     }
 
-    pub fn buffered(dest: []u8, options: Options) !usize {
-        var input = try interm(options);
+    fn bufcopy(dest: []u8, src: []const u8) !usize {
+        const n = src.len;
+        if (n > dest.len) {
+            return error.BufferTooSmall;
+        }
+        @memcpy(dest[0..n], src);
+        return n;
+    }
+
+    pub fn buffered(comptime v: Variant, dest: []u8, options: Options) !usize {
+        var input = switch (v) {
+            .ascii => try interm(u8, options),
+            .unicode => try interm(u21, options),
+        };
         defer input.deinit();
 
         if (input.items.len == 0 and options.default != null) {
-            const result = options.default.?;
-            const n = result.len;
-            if (n > dest.len) {
-                return error.BufferTooSmall;
-            }
-            @memcpy(dest[0..n], result);
-            return n;
+            return bufcopy(dest, options.default.?);
         }
 
-        var i: usize = 0;
-        for (input.items) |c| {
-            var buffer: [4]u8 = undefined;
-            const n = std.unicode.utf8Encode(c, &buffer) catch unreachable;
-            if (i + n > dest.len) {
-                return error.BufferTooSmall;
-            }
-            @memcpy(dest[i .. i + n], buffer[0..n]);
-            i += n;
-        }
-
-        return i;
+        return switch (v) {
+            .ascii => bufcopy(dest, input.items),
+            .unicode => this: {
+                var i: usize = 0;
+                for (input.items) |c| {
+                    var buffer: [4]u8 = undefined;
+                    const n = std.unicode.utf8Encode(c, &buffer) catch unreachable;
+                    if (i + n > dest.len) {
+                        break :this error.BufferTooSmall;
+                    }
+                    @memcpy(dest[i .. i + n], buffer[0..n]);
+                    i += n;
+                }
+                break :this i;
+            },
+        };
     }
 };
