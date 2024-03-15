@@ -1,22 +1,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const prism = @import("prism");
+const prompt = @import("../prompt.zig");
 
 const g = prism.graphic;
-
-var _term_init: bool = false;
-var _term: prism.Terminal = undefined;
-
-fn term() !prism.Terminal {
-    if (_term_init) {
-        return _term;
-    }
-
-    const stdout = std.io.getStdOut();
-    _term = try prism.Terminal.init(stdout);
-    _term_init = true;
-    return _term;
-}
 
 fn moveLeft(comptime T: type, items: []const T, cursor: u16, ctrl: bool) u16 {
     if (!ctrl or cursor <= 1) {
@@ -179,10 +166,12 @@ pub const text = struct {
             else => @compileError("unsupported type"),
         }
 
-        var t = try term();
-        var r = prism.Terminal.EventReader{ .file = t.file };
-        try t.enableRaw();
+        var t = try prompt.terminal.get();
+        if (t.raw_enabled) {
+            return error.Unsupported;
+        }
 
+        try t.enableRaw();
         errdefer t.disableRaw() catch {};
         defer t.unbufferedWrite("\n") catch {};
         defer t.disableRaw() catch {};
@@ -209,6 +198,11 @@ pub const text = struct {
             prism.cursor.up(1),
             prism.cursor.save,
         });
+
+        prompt.terminal.reader_mutex.lock();
+        defer prompt.terminal.reader_mutex.unlock();
+        const r = &prompt.terminal.reader;
+        try r.reset();
 
         while (!confirmed) {
             const ev = try r.read();
