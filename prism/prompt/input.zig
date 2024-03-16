@@ -50,63 +50,63 @@ fn moveRight(comptime T: type, items: []const T, cursor: u16, ctrl: bool) u16 {
     return @min(move, items.len - cursor);
 }
 
-pub const text = struct {
-    pub const Style = struct {
-        before: ?[]const u8 = null,
-        after: ?[]const u8 = null,
+pub const Style = struct {
+    before: ?[]const u8 = null,
+    after: ?[]const u8 = null,
 
-        const p = std.fmt.comptimePrint;
-        const origin = struct {
-            const question: Style = .{
-                .before = p("{s}> {s}", .{
-                    g.attrs(&.{g.fg(.{ .ansi = .green })}),
-                    g.attrs(&.{}),
-                }),
-                .after = "? ",
-            };
-
-            const default: Style = .{
-                .before = p("{s}", .{
-                    g.attrs(&.{g.fg(.{ .ansi = .bright_black })}),
-                }),
-                .after = p("{s}", .{
-                    g.attrs(&.{}),
-                }),
-            };
-
-            const invalid: Style = .{
-                .before = p("{s}! {s}", .{
-                    g.attrs(&.{g.fg(.{ .ansi = .red })}),
-                    g.attrs(&.{}),
-                }),
-                .after = "",
-            };
+    const p = std.fmt.comptimePrint;
+    const origin = struct {
+        const question: Style = .{
+            .before = p("{s}> {s}", .{
+                g.attrs(&.{g.fg(.{ .ansi = .green })}),
+                g.attrs(&.{}),
+            }),
+            .after = "? ",
         };
 
-        fn fill(self: Style, maybe_other: ?Style) Style {
-            if (maybe_other == null) {
-                return self;
-            }
-            var result = maybe_other.?;
-            if (self.before != null) {
-                result.before = self.before;
-            }
-            if (self.after != null) {
-                result.after = self.after;
-            }
-            return result;
-        }
+        const default: Style = .{
+            .before = p("{s}", .{
+                g.attrs(&.{g.fg(.{ .ansi = .bright_black })}),
+            }),
+            .after = p("{s}", .{
+                g.attrs(&.{}),
+            }),
+        };
+
+        const invalid: Style = .{
+            .before = p("{s}! {s}", .{
+                g.attrs(&.{g.fg(.{ .ansi = .red })}),
+                g.attrs(&.{}),
+            }),
+            .after = "",
+        };
     };
 
+    fn fill(self: Style, maybe_other: ?Style) Style {
+        if (maybe_other == null) {
+            return self;
+        }
+        var result = maybe_other.?;
+        if (self.before != null) {
+            result.before = self.before;
+        }
+        if (self.after != null) {
+            result.after = self.after;
+        }
+        return result;
+    }
+};
+
+pub const Theme = struct {
+    question: ?Style = null,
+    default: ?Style = null,
+    invalid: ?Style = null,
+};
+
+pub const text = struct {
     pub const Variant = enum {
         ascii,
         unicode,
-    };
-
-    pub const Theme = struct {
-        question: ?Style = null,
-        default: ?Style = null,
-        invalid: ?Style = null,
     };
 
     pub const Options = struct {
@@ -125,7 +125,7 @@ pub const text = struct {
         default: ?[]const u8,
         maybe_validate: ?Options.Validator,
     ) !?[]const u8 {
-        var validate = maybe_validate orelse return null;
+        const validate = maybe_validate orelse return null;
         const count = switch (T) {
             u8 => string.len,
             u21 => this: {
