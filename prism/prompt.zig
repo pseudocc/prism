@@ -4,16 +4,19 @@ const prism = @import("prism");
 pub const terminal = struct {
     const stdout = std.io.getStdOut();
 
-    var maybe_instance: ?prism.Terminal = null;
+    var instance: prism.Terminal = undefined;
+    var inited = false;
+
     pub var reader = prism.Terminal.EventReader{ .file = stdout };
     pub var reader_mutex = std.Thread.Mutex{};
 
-    pub fn get() !prism.Terminal {
-        if (maybe_instance) |instance| {
-            return instance;
+    pub fn get() !*prism.Terminal {
+        if (inited) {
+            return &instance;
         }
-        maybe_instance = try prism.Terminal.init(stdout);
-        return maybe_instance.?;
+        inited = true;
+        instance = try prism.Terminal.init(stdout);
+        return &instance;
     }
 };
 
