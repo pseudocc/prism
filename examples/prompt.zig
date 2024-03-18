@@ -41,7 +41,7 @@ pub fn main() !void {
     const n = prompt.input.text.buffered(.ascii, &buffer, .{
         .question = "What is your age",
         .default = "30",
-        .validate = &validateAge,
+        .validator = &validateAge,
     }) catch |e| return handleInterrupt(e);
     const ageString = buffer[0..n];
     const age = std.fmt.parseInt(u8, ageString, 10) catch unreachable;
