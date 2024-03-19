@@ -122,7 +122,7 @@ pub const Terminal = struct {
 
     pub fn init(file: File) !Terminal {
         const fd = file.handle;
-        var canonical = try os.tcgetattr(fd);
+        const canonical = try os.tcgetattr(fd);
         var raw = canonical;
 
         raw.iflag &= ~(sys.BRKINT | sys.ICRNL | sys.INPCK |
@@ -171,22 +171,22 @@ pub const Terminal = struct {
     }
 
     pub inline fn unbufferedWrite(self: *Self, data: anytype) !void {
-        var writer = self.file.writer();
+        const writer = self.file.writer();
         try writer.print("{s}", .{data});
     }
 
     pub inline fn unbufferedPrint(self: *Self, comptime fmt: []const u8, args: anytype) !void {
-        var writer = self.file.writer();
+        const writer = self.file.writer();
         try writer.print(fmt, args);
     }
 
     pub inline fn write(self: *Self, data: anytype) !void {
-        var writer = self.buffered.writer();
+        const writer = self.buffered.writer();
         try writer.print("{s}", .{data});
     }
 
     pub inline fn print(self: *Self, comptime fmt: []const u8, args: anytype) !void {
-        var writer = self.buffered.writer();
+        const writer = self.buffered.writer();
         try writer.print(fmt, args);
     }
 

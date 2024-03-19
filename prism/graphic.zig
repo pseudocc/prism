@@ -88,7 +88,7 @@ pub const Rendition = struct {
         };
     }
 
-    pub fn deinit(self: *Self) void {
+    pub fn deinit(self: Self) void {
         self.attrs.deinit();
     }
 
@@ -243,7 +243,7 @@ pub const colors = struct {
             const f = std.fmt.format;
             switch (trait) {
                 .ansi => |c| {
-                    var value = @intFromEnum(c);
+                    const value = @intFromEnum(c);
                     try f(writer, "{d}", .{offset + value});
                 },
                 .ansi256 => |c| {
