@@ -37,14 +37,11 @@ pub fn main() !void {
     defer allocator.free(name);
     try stdout.print("Hello, {s}.\n", .{name});
 
-    var buffer: [16]u8 = undefined;
-    const n = prompt.input.text.buffered(.ascii, &buffer, .{
+    const age = prompt.input.number(u8).inquire(.{
         .question = "What is your age",
-        .default = "30",
-        .validator = &validateAge,
+        .default = 30,
+        .validator = prompt.input.number(u8).validator.max(.{ 255, false }),
     }) catch |e| return handleInterrupt(e);
-    const ageString = buffer[0..n];
-    const age = std.fmt.parseInt(u8, ageString, 10) catch unreachable;
     const message = switch (age) {
         0...2 => "Baby, you won't remember this!",
         3...12 => "Kid, enjoy your childhood!",

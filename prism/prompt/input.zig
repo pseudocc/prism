@@ -162,7 +162,33 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
             .key => |e| {
                 switch (e.key) {
                     .code => |c| if (std.ascii.isPrint(c)) {
-                        try ctx.insert(c);
+                        const is_valid = if (T == []const u8) true else this: {
+                            const signed = switch (@typeInfo(T)) {
+                                .Int => |i| i.signedness == .signed,
+                                .Float => true,
+                                else => unreachable,
+                            };
+                            const is_float = switch (@typeInfo(T)) {
+                                .Float => true,
+                                else => false,
+                            };
+
+                            if (std.ascii.isDigit(c)) break :this true;
+                            const items = ctx.input.items;
+                            // let's just don't make it too complicated
+                            // we won't restrict input after 0b, 0o.
+                            break :this switch (c) {
+                                '.' => is_float,
+                                '-' => signed,
+                                '+', 'e', 'E' => is_float,
+                                'x', 'X', 'o', 'O', 'b', 'B' => !is_float and
+                                    (ctx.cursor == 1 and items[0] == '0'),
+                                'a'...'f', 'A'...'F' => !is_float and
+                                    (ctx.cursor > 1 and items[0] == '0' and std.ascii.toLower(items[1]) == 'x'),
+                                else => false,
+                            };
+                        };
+                        if (is_valid) try ctx.insert(c);
                     } else if (std.ascii.isControl(c)) {
                         switch (c) {
                             std.ascii.control_code.etx => return error.Interrupted,
@@ -207,9 +233,16 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
         const items = ctx.input.items;
         const cursor = ctx.cursor;
         if (items.len == 0) {
-            try t.print("{s}{s}{s}{s}", .{
-                default_style.before.?,
-                options.default orelse "",
+            try t.write(default_style.before.?);
+            if (options.default) |default| {
+                const fmt = switch (Options(T).kind) {
+                    .integer => "{d}",
+                    .float => "{f}",
+                    .string => "{s}",
+                };
+                try t.print(fmt, .{default});
+            }
+            try t.print("{s}{s}", .{
                 default_style.after.?,
                 prism.cursor.restore,
             });
@@ -300,15 +333,15 @@ pub fn Options(comptime T: type) type {
         string,
     };
 
-    const kind: OutputKind = if (T == []const u8) .string else switch (@typeInfo(T)) {
-        .Int => .integer,
-        .Float => .float,
-        else => @compileError("unsupported type"),
-    };
-
     return struct {
-        const Self = @This();
         pub const Validator = *const fn (T) ?[]const u8;
+
+        const Self = @This();
+        const kind: OutputKind = if (T == []const u8) .string else switch (@typeInfo(T)) {
+            .Int => .integer,
+            .Float => .float,
+            else => @compileError("unsupported type"),
+        };
 
         question: []const u8,
         default: ?T = null,
@@ -334,12 +367,13 @@ pub fn Options(comptime T: type) type {
             if (count == 0) {
                 const default_string = this: {
                     const default = self.default orelse break :this "";
-                    break :this switch (kind) {
+                    break :this try switch (kind) {
                         .integer => std.fmt.allocPrint(allocator, "{d}", .{default}),
                         .float => std.fmt.allocPrint(allocator, "{f}", .{default}),
                         .string => return self.validateString(default),
                     };
                 };
+
                 defer allocator.free(default_string);
                 return self.validateString(default_string);
             }
@@ -363,11 +397,11 @@ pub fn Options(comptime T: type) type {
         fn validateString(self: Self, string: []const u8) ?[]const u8 {
             const validator = self.validator orelse return null;
             const value: T = switch (kind) {
-                .integer => std.fmt.parseInt(T, string, 10) catch |e| switch (e) {
+                .integer => number(T).parse(string) catch |e| switch (e) {
                     std.fmt.ParseIntError.Overflow => return "Overflow",
                     std.fmt.ParseIntError.InvalidCharacter => return "Invalid character",
                 },
-                .float => std.fmt.parseFloat(T, string) catch |e| switch (e) {
+                .float => number(T).parse(string) catch |e| switch (e) {
                     std.fmt.ParseFloatError.InvalidCharacter => return "Invalid character",
                 },
                 .string => string,
@@ -444,3 +478,96 @@ pub const text = struct {
         };
     }
 };
+
+pub fn number(comptime T: type) type {
+    return struct {
+        pub const NumberOptions = Options(T);
+
+        pub const validator = struct {
+            pub const Bound = struct { T, bool };
+
+            pub fn min(comptime bound: Bound) NumberOptions.Validator {
+                const Closure = struct {
+                    pub fn call(value: T) ?[]const u8 {
+                        if (bound[1]) {
+                            if (value < bound[0]) {
+                                return std.fmt.comptimePrint("Value should be greater than or equal to {}", .{bound[0]});
+                            }
+                        } else {
+                            if (value <= bound[0]) {
+                                return std.fmt.comptimePrint("Value should be greater than {}", .{bound[0]});
+                            }
+                        }
+                        return null;
+                    }
+                };
+                return &Closure.call;
+            }
+
+            pub fn max(comptime bound: Bound) NumberOptions.Validator {
+                const Closure = struct {
+                    pub fn call(value: T) ?[]const u8 {
+                        if (bound[1]) {
+                            if (value > bound[0]) {
+                                return std.fmt.comptimePrint("Value should be less than or equal to {}", .{bound[0]});
+                            }
+                        } else {
+                            if (value >= bound[0]) {
+                                return std.fmt.comptimePrint("Value should be less than {}", .{bound[0]});
+                            }
+                        }
+                        return null;
+                    }
+                };
+                return &Closure.call;
+            }
+
+            pub fn range(comptime lower: Bound, comptime upper: Bound) NumberOptions.Validator {
+                const Closure = struct {
+                    pub fn call(value: T) ?[]const u8 {
+                        if (min(lower)(value)) |message| {
+                            return message;
+                        }
+                        if (max(upper)(value)) |message| {
+                            return message;
+                        }
+                        return null;
+                    }
+                };
+                return &Closure.call;
+            }
+        };
+
+        fn parse(items: []const u8) !T {
+            switch (@typeInfo(T)) {
+                .Int => {
+                    const base: u8 = if (items.len > 2 and items[0] == '0') this: {
+                        switch (std.ascii.toLower(items[1])) {
+                            'x' => break :this 16,
+                            'o' => break :this 8,
+                            'b' => break :this 2,
+                            else => return std.fmt.ParseIntError.InvalidCharacter,
+                        }
+                    } else return std.fmt.parseInt(T, items, 10);
+                    return std.fmt.parseInt(T, items[2..], base);
+                },
+                .Float => return std.fmt.parseFloat(T, items) catch unreachable,
+                else => unreachable,
+            }
+        }
+
+        pub fn inquire(options: NumberOptions) !T {
+            var input = try readInput(T, u8, options);
+            defer input.deinit();
+
+            if (input.items.len == 0 and options.default != null) {
+                return options.default.?;
+            }
+
+            return switch (@typeInfo(T)) {
+                .Int, .Float => parse(input.items),
+                else => unreachable,
+            };
+        }
+    };
+}
