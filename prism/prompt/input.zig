@@ -5,7 +5,27 @@ const prompt = @import("../prompt.zig");
 
 const g = prism.graphic;
 
-fn prepareQestion(options: anytype) !*prism.Terminal {
+fn prepareQestion(comptime T: type, options: Options(T)) !*prism.Terminal {
+    if (options.default) |default| {
+        const default_value: T = switch (Options(T).kind) {
+            .integer => this: {
+                switch (default.base) {
+                    2, 8, 10, 16 => {},
+                    else => return error.UnsupportedBase,
+                }
+                break :this default.value;
+            },
+            .float => default.value,
+            .string => default,
+        };
+
+        if (options.validator) |validator| {
+            if (validator(default_value)) |_| {
+                return error.InvalidDefault;
+            }
+        }
+    }
+
     const t = try prompt.terminal.get();
     if (t.raw_enabled) {
         return error.Unsupported;
@@ -140,7 +160,7 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
         else => @compileError("unsupported type"),
     }
 
-    var t = try prepareQestion(options);
+    const t = try prepareQestion(T, options);
     defer deferCommon(t);
     errdefer errdeferCommon(t);
 
@@ -173,19 +193,48 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
                                 else => false,
                             };
 
-                            if (std.ascii.isDigit(c)) break :this true;
                             const items = ctx.input.items;
-                            // let's just don't make it too complicated
-                            // we won't restrict input after 0b, 0o.
+                            switch (ctx.cursor) {
+                                0 => switch (c) {
+                                    '-' => break :this signed,
+                                    else => {},
+                                },
+                                1 => {
+                                    const first = items[0];
+                                    if (first == '0') {
+                                        switch (std.ascii.toLower(c)) {
+                                            'x', 'o', 'b' => break :this !is_float,
+                                            else => {},
+                                        }
+                                    }
+                                },
+                                2 => {
+                                    const first = items[0];
+                                    const second = items[1];
+                                    if (first == '0' and !is_float) {
+                                        break :this switch (std.ascii.toLower(second)) {
+                                            'x' => switch (c) {
+                                                'a'...'f', 'A'...'F', '0'...'9' => true,
+                                                else => false,
+                                            },
+                                            'o' => switch (c) {
+                                                '0'...'7' => true,
+                                                else => false,
+                                            },
+                                            'b' => switch (c) {
+                                                '0', '1' => true,
+                                                else => false,
+                                            },
+                                            else => std.ascii.isDigit(c),
+                                        };
+                                    }
+                                },
+                                else => {},
+                            }
+
                             break :this switch (c) {
-                                '.' => is_float,
-                                '-' => signed,
-                                '+', 'e', 'E' => is_float,
-                                'x', 'X', 'o', 'O', 'b', 'B' => !is_float and
-                                    (ctx.cursor == 1 and items[0] == '0'),
-                                'a'...'f', 'A'...'F' => !is_float and
-                                    (ctx.cursor > 1 and items[0] == '0' and std.ascii.toLower(items[1]) == 'x'),
-                                else => false,
+                                '.', 'e', 'E', '-' => is_float,
+                                else => std.ascii.isDigit(c),
                             };
                         };
                         if (is_valid) try ctx.insert(c);
@@ -235,12 +284,19 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
         if (items.len == 0) {
             try t.write(default_style.before.?);
             if (options.default) |default| {
-                const fmt = switch (Options(T).kind) {
-                    .integer => "{d}",
-                    .float => "{f}",
-                    .string => "{s}",
-                };
-                try t.print(fmt, .{default});
+                const writer = t.buffered.writer();
+                switch (Options(T).kind) {
+                    .integer => try std.fmt.formatInt(default.value, default.base, .lower, .{}, writer),
+                    .float => {
+                        const format: std.fmt.FormatOptions = .{ .precision = default.precision };
+                        switch (default.format) {
+                            .decimal => try std.fmt.formatFloatDecimal(default.value, format, writer),
+                            .scientific => try std.fmt.formatFloatScientific(default.value, format, writer),
+                            .hexadecimal => try std.fmt.formatFloatHexadecimal(default.value, format, writer),
+                        }
+                    },
+                    .string => try t.print("{s}", .{default}),
+                }
             }
             try t.print("{s}{s}", .{
                 default_style.after.?,
@@ -343,15 +399,32 @@ pub fn Options(comptime T: type) type {
             else => @compileError("unsupported type"),
         };
 
+        const Default = switch (kind) {
+            .integer => struct {
+                value: T,
+                base: u8 = 10,
+            },
+            .float => struct {
+                value: T,
+                precision: u8 = 4,
+                format: enum {
+                    decimal,
+                    scientific,
+                    hexadecimal,
+                } = .decimal,
+            },
+            .string => T,
+        };
+
         question: []const u8,
-        default: ?T = null,
+        default: ?Default = null,
         validator: ?Validator = null,
 
         theme: Theme = .{},
 
-        fn validate(self: Self, comptime Y: type, string: []const Y) !?[]const u8 {
-            var allocator = std.heap.page_allocator;
-            const count = switch (Y) {
+        fn validate(self: Self, comptime BufferType: type, string: []const BufferType) !?[]const u8 {
+            const allocator = std.heap.page_allocator;
+            const count = switch (BufferType) {
                 u8 => string.len,
                 u21 => this: {
                     var n: usize = 0;
@@ -365,20 +438,12 @@ pub fn Options(comptime T: type) type {
             };
 
             if (count == 0) {
-                const default_string = this: {
-                    const default = self.default orelse break :this "";
-                    break :this try switch (kind) {
-                        .integer => std.fmt.allocPrint(allocator, "{d}", .{default}),
-                        .float => std.fmt.allocPrint(allocator, "{f}", .{default}),
-                        .string => return self.validateString(default),
-                    };
-                };
-
-                defer allocator.free(default_string);
-                return self.validateString(default_string);
+                // we checked default value before
+                if (self.default) |_| return null;
+                return self.validateString("");
             }
 
-            if (Y == u8) {
+            if (BufferType == u8) {
                 return self.validateString(string);
             }
 
@@ -551,7 +616,7 @@ pub fn number(comptime T: type) type {
                     } else return std.fmt.parseInt(T, items, 10);
                     return std.fmt.parseInt(T, items[2..], base);
                 },
-                .Float => return std.fmt.parseFloat(T, items) catch unreachable,
+                .Float => return std.fmt.parseFloat(T, items),
                 else => unreachable,
             }
         }
@@ -561,7 +626,7 @@ pub fn number(comptime T: type) type {
             defer input.deinit();
 
             if (input.items.len == 0 and options.default != null) {
-                return options.default.?;
+                return options.default.?.value;
             }
 
             return switch (@typeInfo(T)) {

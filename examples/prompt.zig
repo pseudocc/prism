@@ -29,7 +29,7 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
 
-    var allocator = gpa.allocator();
+    const allocator = gpa.allocator();
     const name = prompt.input.text.allocated(.unicode, allocator, .{
         .question = "What is your name",
         .default = "Nobody",
@@ -37,12 +37,17 @@ pub fn main() !void {
     defer allocator.free(name);
     try stdout.print("Hello, {s}.\n", .{name});
 
-    const age = prompt.input.number(u8).inquire(.{
+    const age = prompt.input.number(f32).inquire(.{
         .question = "What is your age",
-        .default = 30,
-        .validator = prompt.input.number(u8).validator.max(.{ 255, false }),
+        .default = .{
+            .precision = 1,
+            .value = 30,
+            .format = .decimal,
+        },
+        .validator = prompt.input.number(f32).validator.max(.{ 255, false }),
     }) catch |e| return handleInterrupt(e);
-    const message = switch (age) {
+    const rounded_age: u8 = @intFromFloat(@round(age));
+    const message = switch (rounded_age) {
         0...2 => "Baby, you won't remember this!",
         3...12 => "Kid, enjoy your childhood!",
         13...19 => "Teenager, don't do anything stupid!",
