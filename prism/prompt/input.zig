@@ -26,8 +26,116 @@ fn prepareQestion(options: anytype) !*prism.Terminal {
     return t;
 }
 
-fn readInput(comptime T: type, options: anytype) !std.ArrayList(T) {
-    switch (T) {
+fn InputContext(comptime T: type) type {
+    const VDELAY = 5;
+    const Direction = enum {
+        forward,
+        backward,
+    };
+
+    return struct {
+        const Self = @This();
+
+        vdelay: usize = VDELAY,
+        cursor: u16 = 0,
+        confirmed: bool = false,
+        maybe_invalid: ?[]const u8 = null,
+        input: std.ArrayList(T),
+
+        // refactor moveLeft and moveRight into this
+        fn move(self: *Self, comptime direction: Direction, word_level: bool) u16 {
+            const items = self.input.items;
+            const early_exit: bool = !word_level or switch (direction) {
+                .forward => items.len - self.cursor <= 1,
+                .backward => self.cursor <= 1,
+            };
+            if (early_exit) {
+                return switch (direction) {
+                    .forward => @min(items.len - self.cursor, 1),
+                    .backward => @min(self.cursor, 1),
+                };
+            }
+
+            var count: u16 = switch (direction) {
+                .forward => 1,
+                .backward => 0,
+            };
+            while (true) : (count += 1) {
+                const if_cond = switch (direction) {
+                    .forward => self.cursor + count < items.len,
+                    .backward => self.cursor - count > 0,
+                };
+                if (!if_cond) break;
+
+                const item = switch (direction) {
+                    .forward => items[self.cursor + count],
+                    .backward => items[self.cursor - count - 1],
+                };
+                const sentinel: u8 = switch (T) {
+                    u8 => item,
+                    u21 => this: {
+                        const n = std.unicode.utf8CodepointSequenceLength(item) catch unreachable;
+                        break :this if (n == 1) @intCast(item) else std.ascii.control_code.nul;
+                    },
+                    else => unreachable,
+                };
+                if (!std.ascii.isAlphanumeric(sentinel)) break;
+            }
+            return count;
+        }
+
+        inline fn insert(self: *Self, c: T) !void {
+            try self.input.insert(self.cursor, c);
+            self.setCursor(self.cursor + 1);
+        }
+
+        inline fn remove(self: *Self, comptime direction: Direction, word_level: bool) !void {
+            const count = self.move(direction, word_level);
+            if (count < 0) return;
+
+            switch (direction) {
+                .forward => {
+                    try self.input.replaceRange(self.cursor, count, &.{});
+                    self.resetVdelay();
+                },
+                .backward => {
+                    try self.input.replaceRange(self.cursor - count, count, &.{});
+                    self.setCursor(self.cursor - count);
+                },
+            }
+        }
+
+        inline fn confirm(self: *Self, options: anytype) !void {
+            self.maybe_invalid = try options.validate(T, self.input.items);
+            self.confirmed = true;
+        }
+
+        inline fn setCursor(self: *Self, cursor: u16) void {
+            self.cursor = cursor;
+            self.resetVdelay();
+        }
+
+        inline fn decVdelay(self: *Self, options: anytype) !void {
+            if (self.vdelay == 0) return;
+            self.vdelay -= 1;
+            if (self.vdelay == 0) {
+                self.maybe_invalid = try options.validate(T, self.input.items);
+            }
+        }
+
+        inline fn resetVdelay(self: *Self) void {
+            self.vdelay = VDELAY;
+            self.maybe_invalid = null;
+        }
+
+        inline fn justUpdated(self: *Self) bool {
+            return self.vdelay == VDELAY;
+        }
+    };
+}
+
+fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !std.ArrayList(BufferType) {
+    switch (BufferType) {
         u8, u21 => {},
         else => @compileError("unsupported type"),
     }
@@ -39,90 +147,50 @@ fn readInput(comptime T: type, options: anytype) !std.ArrayList(T) {
     const default_style = Style.origin.default.fill(options.theme.default);
     const invalid_style = Style.origin.invalid.fill(options.theme.invalid);
 
-    const VDELAY = 5;
-    var maybe_invalid: ?[]const u8 = null;
-    var vdelay: usize = VDELAY;
-    var cursor: u16 = 0;
-    var confirmed = false;
-
-    var input = std.ArrayList(T).init(std.heap.page_allocator);
-    errdefer input.deinit();
+    var ctx = InputContext(BufferType){ .input = std.ArrayList(BufferType).init(std.heap.page_allocator) };
+    errdefer ctx.input.deinit();
 
     prompt.terminal.reader_mutex.lock();
     defer prompt.terminal.reader_mutex.unlock();
     const r = &prompt.terminal.reader;
     try r.reset();
 
-    while (!confirmed) {
+    while (!ctx.confirmed) {
         const ev = try r.read();
         switch (ev) {
-            .idle => {
-                if (vdelay > 0) {
-                    vdelay -= 1;
-                    if (vdelay == 0) {
-                        maybe_invalid = try options.validate(T, input.items);
-                    }
-                }
-            },
+            .idle => try ctx.decVdelay(options),
             .key => |e| {
                 switch (e.key) {
-                    .code => |c| {
-                        if (std.ascii.isPrint(c)) {
-                            try input.insert(cursor, c);
-                            cursor += 1;
-                            vdelay = VDELAY;
-                        } else if (std.ascii.isControl(c)) {
-                            switch (c) {
-                                std.ascii.control_code.etx => return error.Interrupted,
-                                std.ascii.control_code.eot => return error.Aborted,
-                                else => {},
-                            }
+                    .code => |c| if (std.ascii.isPrint(c)) {
+                        try ctx.insert(c);
+                    } else if (std.ascii.isControl(c)) {
+                        switch (c) {
+                            std.ascii.control_code.etx => return error.Interrupted,
+                            std.ascii.control_code.eot => return error.Aborted,
+                            else => {},
                         }
                     },
-                    .home => cursor = 0,
-                    .left => cursor -= moveLeft(T, input.items, cursor, e.modifiers.ctrl),
-                    .end => cursor = @intCast(input.items.len),
-                    .right => cursor += moveRight(T, input.items, cursor, e.modifiers.ctrl),
-                    .delete => {
-                        const move = moveRight(T, input.items, cursor, e.modifiers.ctrl);
-                        if (move > 0) {
-                            try input.replaceRange(cursor, move, &.{});
-                            vdelay = VDELAY;
-                        }
-                    },
-                    .backspace => {
-                        const move = moveLeft(T, input.items, cursor, e.modifiers.ctrl);
-                        if (move > 0) {
-                            try input.replaceRange(cursor - move, move, &.{});
-                            cursor -= move;
-                            vdelay = VDELAY;
-                        }
-                    },
-                    .enter => {
-                        maybe_invalid = try options.validate(T, input.items);
-                        confirmed = true;
-                    },
+                    .home => ctx.cursor = 0,
+                    .left => ctx.cursor -= ctx.move(.backward, e.modifiers.ctrl),
+                    .end => ctx.cursor = @intCast(ctx.input.items.len),
+                    .right => ctx.cursor += ctx.move(.forward, e.modifiers.ctrl),
+                    .delete => try ctx.remove(.forward, e.modifiers.ctrl),
+                    .backspace => try ctx.remove(.backward, e.modifiers.ctrl),
+                    .enter => try ctx.confirm(options),
                     else => {},
                 }
             },
-            .unicode => |c| {
-                if (T == u21) {
-                    try input.insert(cursor, c);
-                    cursor += 1;
-                    vdelay = VDELAY;
-                }
-            },
+            .unicode => |c| if (BufferType == u21) try ctx.insert(c),
             else => {},
         }
 
-        if (vdelay == VDELAY) {
+        if (ctx.justUpdated()) {
             try t.print("{s}{s}{s}", .{
                 prism.cursor.next(1),
                 prism.edit.erase.line(.both),
                 prism.cursor.restore,
             });
-            maybe_invalid = null;
-        } else if (maybe_invalid) |message| {
+        } else if (ctx.maybe_invalid) |message| {
             try t.print("{s}{s}{s}{s}{s}", .{
                 prism.cursor.next(1),
                 prism.edit.erase.line(.both),
@@ -130,13 +198,15 @@ fn readInput(comptime T: type, options: anytype) !std.ArrayList(T) {
                 message,
                 invalid_style.after.?,
             });
-            confirmed = false;
+            ctx.confirmed = false;
         }
 
         try t.write(prism.cursor.restore);
         try t.write(prism.edit.erase.line(.right));
 
-        if (input.items.len == 0) {
+        const items = ctx.input.items;
+        const cursor = ctx.cursor;
+        if (items.len == 0) {
             try t.print("{s}{s}{s}{s}", .{
                 default_style.before.?,
                 options.default orelse "",
@@ -144,7 +214,7 @@ fn readInput(comptime T: type, options: anytype) !std.ArrayList(T) {
                 prism.cursor.restore,
             });
         } else {
-            for (input.items) |c| {
+            for (items) |c| {
                 var buffer: [4]u8 = undefined;
                 const n = std.unicode.utf8Encode(c, &buffer) catch unreachable;
                 try t.write(buffer[0..n]);
@@ -158,7 +228,7 @@ fn readInput(comptime T: type, options: anytype) !std.ArrayList(T) {
         try t.flush();
     }
 
-    return input;
+    return ctx.input;
 }
 
 fn deferCommon(t: *prism.Terminal) void {
@@ -168,51 +238,6 @@ fn deferCommon(t: *prism.Terminal) void {
 
 fn errdeferCommon(t: *prism.Terminal) void {
     t.disableRaw() catch {};
-}
-
-fn moveLeft(comptime T: type, items: []const T, cursor: u16, ctrl: bool) u16 {
-    if (!ctrl or cursor <= 1) {
-        return @min(cursor, 1);
-    }
-    var move: u16 = 1;
-    while (cursor - move > 0) : (move += 1) {
-        const item = items[cursor - move - 1];
-        const sentinel: u8 = switch (T) {
-            u8 => item,
-            u21 => this: {
-                const n = std.unicode.utf8CodepointSequenceLength(item) catch unreachable;
-                break :this if (n == 1) @intCast(item) else std.ascii.control_code.nul;
-            },
-            else => unreachable,
-        };
-        if (!std.ascii.isAlphanumeric(sentinel)) {
-            break;
-        }
-    }
-    return move;
-}
-
-fn moveRight(comptime T: type, items: []const T, cursor: u16, ctrl: bool) u16 {
-    if (!ctrl or items.len - cursor <= 1) {
-        return @min(items.len - cursor, 1);
-    }
-    var move: u16 = 0;
-    while (cursor + move < items.len) : (move += 1) {
-        const item = items[cursor + move];
-        const sentinel: u8 = switch (T) {
-            u8 => item,
-            u21 => this: {
-                const n = std.unicode.utf8CodepointSequenceLength(item) catch unreachable;
-                break :this if (n == 1) @intCast(item) else std.ascii.control_code.nul;
-            },
-            else => unreachable,
-        };
-        if (!std.ascii.isAlphanumeric(sentinel)) {
-            move += 1;
-            break;
-        }
-    }
-    return @min(move, items.len - cursor);
 }
 
 pub const Style = struct {
@@ -362,8 +387,8 @@ pub const text = struct {
 
     pub fn allocated(comptime v: Variant, allocator: Allocator, options: TextOptions) ![]const u8 {
         var input = switch (v) {
-            .ascii => try readInput(u8, options),
-            .unicode => try readInput(u21, options),
+            .ascii => try readInput([]const u8, u8, options),
+            .unicode => try readInput([]const u8, u21, options),
         };
         defer input.deinit();
 
@@ -392,8 +417,8 @@ pub const text = struct {
 
     pub fn buffered(comptime v: Variant, dest: []u8, options: TextOptions) !usize {
         var input = switch (v) {
-            .ascii => try readInput(u8, options),
-            .unicode => try readInput(u21, options),
+            .ascii => try readInput([]const u8, u8, options),
+            .unicode => try readInput([]const u8, u21, options),
         };
         defer input.deinit();
 
