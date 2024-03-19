@@ -52,7 +52,7 @@ pub fn main() !void {
             }
             idles += 1;
             try term.print("{s} x {d}\r\n", .{ event, idles });
-            if (idles > REQPOS) {
+            if (idles >= REQPOS) {
                 try term.unbufferedWrite(cursor.reqpos);
             }
         }
