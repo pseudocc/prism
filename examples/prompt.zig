@@ -33,6 +33,7 @@ pub fn main() !void {
     const name = prompt.input.text.allocated(.unicode, allocator, .{
         .question = "What is your name",
         .default = "Nobody",
+        .cleanup = true,
     }) catch |e| return handleInterrupt(e);
     defer allocator.free(name);
     try stdout.print("Hello, {s}.\n", .{name});

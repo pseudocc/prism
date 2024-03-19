@@ -161,8 +161,7 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
     }
 
     const t = try prepareQestion(T, options);
-    defer deferCommon(t);
-    errdefer errdeferCommon(t);
+    defer deferCommon(options.cleanup, t);
 
     const default_style = Style.origin.default.fill(options.theme.default);
     const invalid_style = Style.origin.invalid.fill(options.theme.invalid);
@@ -172,6 +171,7 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
 
     prompt.terminal.reader_mutex.lock();
     defer prompt.terminal.reader_mutex.unlock();
+
     const r = &prompt.terminal.reader;
     try r.reset();
 
@@ -320,13 +320,18 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
     return ctx.input;
 }
 
-fn deferCommon(t: *prism.Terminal) void {
+fn deferCommon(cleanup: bool, t: *prism.Terminal) void {
     t.disableRaw() catch {};
-    t.unbufferedWrite("\n") catch {};
-}
-
-fn errdeferCommon(t: *prism.Terminal) void {
-    t.disableRaw() catch {};
+    t.flush() catch {};
+    if (cleanup) {
+        t.unbufferedPrint("{s}" ** 3, .{
+            prism.cursor.restore,
+            prism.cursor.column(1),
+            prism.edit.erase.display(.below),
+        }) catch {};
+    } else {
+        t.unbufferedWrite("\n") catch {};
+    }
 }
 
 pub const Style = struct {
@@ -419,6 +424,7 @@ pub fn Options(comptime T: type) type {
         question: []const u8,
         default: ?Default = null,
         validator: ?Validator = null,
+        cleanup: bool = false,
 
         theme: Theme = .{},
 
