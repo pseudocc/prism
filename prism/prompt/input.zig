@@ -35,7 +35,7 @@ fn prepareQestion(comptime T: type, options: Options(T)) !*prism.Terminal {
     const question_style = Style.origin.question.fill(options.theme.question);
 
     // "\n + up(1)" will preserve a newline for the error message
-    try t.print("{s}{s}{s}\n{s}{s}", .{
+    try t.print("{s}" ** 3 ++ "\n" ++ "{s}" ** 2, .{
         question_style.before.?,
         options.question,
         question_style.after.?,
@@ -260,13 +260,13 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
         }
 
         if (ctx.justUpdated()) {
-            try t.print("{s}{s}{s}", .{
+            try t.print("{s}" ** 3, .{
                 prism.cursor.next(1),
                 prism.edit.erase.line(.both),
                 prism.cursor.restore,
             });
         } else if (ctx.maybe_invalid) |message| {
-            try t.print("{s}{s}{s}{s}{s}", .{
+            try t.print("{s}" ** 5, .{
                 prism.cursor.next(1),
                 prism.edit.erase.line(.both),
                 invalid_style.before.?,
@@ -298,7 +298,7 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
                     .string => try t.print("{s}", .{default}),
                 }
             }
-            try t.print("{s}{s}", .{
+            try t.print("{s}" ** 2, .{
                 default_style.after.?,
                 prism.cursor.restore,
             });
@@ -308,7 +308,7 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
                 const n = std.unicode.utf8Encode(c, &buffer) catch unreachable;
                 try t.write(buffer[0..n]);
             }
-            try t.print("{s}{s}", .{
+            try t.print("{s}" ** 2, .{
                 prism.cursor.restore,
                 prism.cursor.right(cursor),
             });
