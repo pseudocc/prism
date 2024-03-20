@@ -4,6 +4,7 @@ const prism = @import("prism");
 const prompt = @import("../prompt.zig");
 
 const g = prism.graphic;
+const testing = std.testing;
 
 fn prepareQestion(comptime T: type, options: Options(T)) !*prism.Terminal {
     if (options.default) |default| {
@@ -181,6 +182,61 @@ fn InputContext(comptime T: type) type {
             return self.vdelay == VDELAY;
         }
     };
+}
+
+test "prism.prompt.input.InputContext(u8)" {
+    const allocator = testing.allocator;
+    const initial = "Hello, world!";
+
+    var ctx = InputContext(u8){ .input = std.ArrayList(u8).init(allocator) };
+    var count: u16 = undefined;
+    defer ctx.input.deinit();
+
+    for (initial) |c| {
+        try ctx.insert(c);
+    }
+
+    try testing.expectEqualStrings(ctx.input.items, initial);
+    try testing.expect(ctx.cursor == initial.len);
+    try testing.expect(ctx.cursor == ctx.input.items.len);
+
+    count = ctx.move(.backward, false);
+    try testing.expect(count == 1);
+
+    ctx.remove(.backward, false);
+    try testing.expectEqualStrings(ctx.input.items, "Hello, world");
+
+    ctx.cursor -= ctx.move(.backward, true);
+    for ("new ") |c| {
+        try ctx.insert(c);
+    }
+    try testing.expectEqualStrings(ctx.input.items, "Hello, new world");
+
+    ctx.cursor = 0;
+    ctx.remove(.forward, true);
+    for ("Bye") |c| {
+        try ctx.insert(c);
+    }
+    try testing.expectEqualStrings(ctx.input.items, "Bye, new world");
+}
+
+test "prism.prompt.input.InputContext(u21)" {
+    const allocator = testing.allocator;
+
+    var ctx = InputContext(u21){ .input = std.ArrayList(u21).init(allocator) };
+    defer ctx.input.deinit();
+
+    for ("Hello, ") |c| {
+        try ctx.insert(c);
+    }
+    try ctx.insert(std.unicode.utf8Decode("世") catch unreachable);
+    try ctx.insert(std.unicode.utf8Decode("界") catch unreachable);
+    try ctx.insert(std.unicode.utf8Decode("🌍") catch unreachable);
+
+    const u8_input = try ctx.u8Input();
+    defer u8_input.deinit();
+    try testing.expectEqualStrings(u8_input.items, "Hello, 世界🌍");
+    try testing.expect(ctx.cursor == ctx.input.items.len);
 }
 
 fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !std.ArrayList(BufferType) {
