@@ -109,17 +109,22 @@ fn InputContext(comptime T: type) type {
             self.setCursor(self.cursor + 1);
         }
 
-        inline fn remove(self: *Self, comptime direction: Direction, word_level: bool) !void {
+        inline fn removeRange(self: *Self, start: u16, count: u16) void {
+            // remove items won't fail
+            self.input.replaceRange(start, count, &.{}) catch unreachable;
+        }
+
+        inline fn remove(self: *Self, comptime direction: Direction, word_level: bool) void {
             const count = self.move(direction, word_level);
             if (count < 0) return;
 
             switch (direction) {
                 .forward => {
-                    try self.input.replaceRange(self.cursor, count, &.{});
+                    self.removeRange(self.cursor, count);
                     self.resetVdelay();
                 },
                 .backward => {
-                    try self.input.replaceRange(self.cursor - count, count, &.{});
+                    self.removeRange(self.cursor - count, count);
                     self.setCursor(self.cursor - count);
                 },
             }
@@ -249,8 +254,8 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
                     .left => ctx.cursor -= ctx.move(.backward, e.modifiers.ctrl),
                     .end => ctx.cursor = @intCast(ctx.input.items.len),
                     .right => ctx.cursor += ctx.move(.forward, e.modifiers.ctrl),
-                    .delete => try ctx.remove(.forward, e.modifiers.ctrl),
-                    .backspace => try ctx.remove(.backward, e.modifiers.ctrl),
+                    .delete => ctx.remove(.forward, e.modifiers.ctrl),
+                    .backspace => ctx.remove(.backward, e.modifiers.ctrl),
                     .enter => try ctx.confirm(options),
                     else => {},
                 }
