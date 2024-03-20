@@ -387,23 +387,10 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
         const items = ctx.input.items;
         const cursor = ctx.cursor;
         if (items.len == 0) {
-            try t.write(default_style.before.?);
-            if (options.default) |default| {
-                const writer = t.buffered.writer();
-                switch (Options(T).kind) {
-                    .integer => try std.fmt.formatInt(default.value, default.base, .lower, .{}, writer),
-                    .float => {
-                        const format: std.fmt.FormatOptions = .{ .precision = default.precision };
-                        switch (default.format) {
-                            .decimal => try std.fmt.formatFloatDecimal(default.value, format, writer),
-                            .scientific => try std.fmt.formatFloatScientific(default.value, format, writer),
-                            .hexadecimal => try std.fmt.formatFloatHexadecimal(default.value, format, writer),
-                        }
-                    },
-                    .string => try t.print("{s}", .{default}),
-                }
-            }
-            try t.print("{s}" ** 2, .{
+            const writer = t.buffered.writer();
+            try writer.writeAll(default_style.before.?);
+            try options.printDefault(writer);
+            try writer.print("{s}" ** 2, .{
                 default_style.after.?,
                 prism.cursor.restore,
             });
@@ -554,6 +541,30 @@ pub fn Options(comptime T: type) type {
                 .string => string,
             };
             return validator(value);
+        }
+
+        fn printDefault(self: Self, writer: anytype) !void {
+            const default = self.default orelse return;
+            switch (kind) {
+                .integer => {
+                    switch (default.base) {
+                        2 => try writer.writeAll("0b"),
+                        8 => try writer.writeAll("0o"),
+                        16 => try writer.writeAll("0x"),
+                        else => {},
+                    }
+                    try std.fmt.formatInt(default.value, default.base, .lower, .{}, writer);
+                },
+                .float => {
+                    const format: std.fmt.FormatOptions = .{ .precision = default.precision };
+                    switch (default.format) {
+                        .decimal => try std.fmt.formatFloatDecimal(default.value, format, writer),
+                        .scientific => try std.fmt.formatFloatScientific(default.value, format, writer),
+                        .hexadecimal => try std.fmt.formatFloatHexadecimal(default.value, format, writer),
+                    }
+                },
+                .string => try writer.writeAll(default),
+            }
         }
     };
 }
