@@ -165,12 +165,16 @@ fn InputContext(comptime T: type) type {
             self.resetVdelay();
         }
 
-        inline fn decVdelay(self: *Self, options: anytype) !void {
-            if (self.vdelay == 0) return;
-            self.vdelay -= 1;
-            if (self.vdelay == 0) {
-                try self.validate(options);
+        /// Returns true if performed validation
+        inline fn decVdelay(self: *Self, options: anytype) !bool {
+            if (self.vdelay > 0) {
+                self.vdelay -= 1;
+                if (self.vdelay == 0) {
+                    try self.validate(options);
+                    return true;
+                }
             }
+            return false;
         }
 
         inline fn resetVdelay(self: *Self) void {
@@ -257,13 +261,15 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
     prompt.terminal.reader_mutex.lock();
     defer prompt.terminal.reader_mutex.unlock();
 
+    var real_idle: bool = undefined;
     const r = &prompt.terminal.reader;
     try r.reset();
 
     while (!ctx.confirmed) {
         const ev = try r.read();
+        if (ev != .idle) real_idle = false;
         switch (ev) {
-            .idle => try ctx.decVdelay(options),
+            .idle => real_idle = !try ctx.decVdelay(options),
             .key => |e| {
                 switch (e.key) {
                     .code => |c| if (std.ascii.isPrint(c)) {
@@ -343,6 +349,8 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
             .unicode => |c| if (BufferType == u21) try ctx.insert(c),
             else => {},
         }
+
+        if (real_idle) continue;
 
         if (ctx.justUpdated()) {
             try t.print("{s}" ** 3, .{
