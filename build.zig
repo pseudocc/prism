@@ -51,29 +51,49 @@ pub fn build(b: *std.Build) void {
 
     var lib = b.addStaticLibrary(.{
         .name = "prism",
-        .root_source_file = .{ .path = "prism.zig" },
+        .root_source_file = prism.source_file,
         .target = target,
         .optimize = optimize,
     });
     for (prism_deps) |dep| {
         lib.addModule(dep.name, dep.module);
     }
-
     b.installArtifact(lib);
 
-    const main_tests = b.addTest(.{
-        .root_source_file = .{ .path = "prism.zig" },
+    var prompt_lib = b.addStaticLibrary(.{
+        .name = "prism.prompt",
+        .root_source_file = prompt.source_file,
         .target = target,
         .optimize = optimize,
     });
-    for (prism_deps) |dep| {
-        main_tests.addModule(dep.name, dep.module);
+    for (prompt.dependencies.keys()) |name| {
+        prompt_lib.addModule(name, prompt.dependencies.get(name).?);
     }
+    b.installArtifact(prompt_lib);
 
-    const run_main_tests = b.addRunArtifact(main_tests);
+    const test_step = b.step("test", "Run all library tests");
+    const core_modules = &[_]*std.Build.Module{
+        common,
+        cursor,
+        edit,
+        graphic,
+        prism,
+    };
+    const extension_modules = &[_]*std.Build.Module{prompt};
+    const all_modules = core_modules ++ extension_modules;
+    inline for (all_modules) |module| {
+        const tests = b.addTest(.{
+            .root_source_file = module.source_file,
+            .target = target,
+            .optimize = optimize,
+        });
+        for (module.dependencies.keys()) |name| {
+            tests.addModule(name, module.dependencies.get(name).?);
+        }
 
-    const test_step = b.step("test", "Run library tests");
-    test_step.dependOn(&run_main_tests.step);
+        const run_tests = b.addRunArtifact(tests);
+        test_step.dependOn(&run_tests.step);
+    }
 
     const examples_step = b.step("examples", "Build examples");
     const examples = &[_][]const u8{ "event", "widget", "prompt" };
