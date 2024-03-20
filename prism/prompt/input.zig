@@ -77,6 +77,7 @@ fn InputContext(comptime T: type) type {
                 };
             }
 
+            var found_target: bool = false;
             var count: u16 = switch (direction) {
                 .forward => 1,
                 .backward => 0,
@@ -84,7 +85,7 @@ fn InputContext(comptime T: type) type {
             while (true) : (count += 1) {
                 const if_cond = switch (direction) {
                     .forward => self.cursor + count < items.len,
-                    .backward => self.cursor - count > 0,
+                    .backward => self.cursor > count,
                 };
                 if (!if_cond) break;
 
@@ -100,8 +101,19 @@ fn InputContext(comptime T: type) type {
                     },
                     else => unreachable,
                 };
-                if (!std.ascii.isAlphanumeric(sentinel)) break;
+
+                const match = switch (direction) {
+                    .forward => std.ascii.isWhitespace(sentinel),
+                    .backward => !std.ascii.isWhitespace(sentinel),
+                };
+                if (match) {
+                    if (found_target) continue;
+                    found_target = true;
+                } else if (found_target) {
+                    break;
+                }
             }
+
             return count;
         }
 
