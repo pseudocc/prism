@@ -21,3 +21,7 @@ pub const terminal = struct {
 };
 
 pub const input = @import("prompt/input.zig");
+
+test {
+    std.testing.refAllDecls(@This());
+}
