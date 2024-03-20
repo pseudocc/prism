@@ -130,8 +130,32 @@ fn InputContext(comptime T: type) type {
             }
         }
 
+        fn u8Input(self: *Self) !std.ArrayList(u8) {
+            var result = std.ArrayList(u8).init(std.heap.page_allocator);
+
+            for (self.input.items) |c| {
+                var buffer: [4]u8 = undefined;
+                const n = std.unicode.utf8Encode(c, &buffer) catch unreachable;
+                try result.appendSlice(buffer[0..n]);
+            }
+
+            return result;
+        }
+
+        inline fn validate(self: *Self, options: anytype) !void {
+            self.maybe_invalid = switch (T) {
+                u8 => options.validate(self.input.items),
+                u21 => this: {
+                    const input = try self.u8Input();
+                    defer input.deinit();
+                    break :this options.validate(input.items);
+                },
+                else => unreachable,
+            };
+        }
+
         inline fn confirm(self: *Self, options: anytype) !void {
-            self.maybe_invalid = try options.validate(T, self.input.items);
+            try self.validate(options);
             self.confirmed = true;
         }
 
@@ -144,7 +168,7 @@ fn InputContext(comptime T: type) type {
             if (self.vdelay == 0) return;
             self.vdelay -= 1;
             if (self.vdelay == 0) {
-                self.maybe_invalid = try options.validate(T, self.input.items);
+                try self.validate(options);
             }
         }
 
@@ -433,41 +457,12 @@ pub fn Options(comptime T: type) type {
 
         theme: Theme = .{},
 
-        fn validate(self: Self, comptime BufferType: type, string: []const BufferType) !?[]const u8 {
-            const allocator = std.heap.page_allocator;
-            const count = switch (BufferType) {
-                u8 => string.len,
-                u21 => this: {
-                    var n: usize = 0;
-                    for (string) |c| {
-                        const l = std.unicode.utf8CodepointSequenceLength(c) catch unreachable;
-                        n += l;
-                    }
-                    break :this n;
-                },
-                else => unreachable,
-            };
-
-            if (count == 0) {
+        fn validate(self: Self, string: []const u8) ?[]const u8 {
+            if (string.len == 0) {
                 // we checked default value before
                 if (self.default) |_| return null;
-                return self.validateString("");
             }
-
-            if (BufferType == u8) {
-                return self.validateString(string);
-            }
-
-            var buffer = try allocator.alloc(u8, count);
-            var pos: usize = 0;
-            defer allocator.free(buffer);
-
-            for (string) |c| {
-                const l = std.unicode.utf8Encode(c, buffer[pos..]) catch unreachable;
-                pos += l;
-            }
-
-            return self.validateString(buffer);
+            return self.validateString(string);
         }
 
         fn validateString(self: Self, string: []const u8) ?[]const u8 {
