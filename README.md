@@ -4,7 +4,7 @@ Prism is a pure zig terminal manipulation library for Linux to build TUI program
 
 ## Quick Start
 
-Enter the alternate screen, enable the raw module, turn on mouse tracking,
+Enter the alternate screen, enable the raw mode, turn on mouse tracking,
 take a look at the `examples/event.zig`.
 
 ![examples/event.zig](https://pseudocc.github.io/prism/event.gif) 
@@ -18,6 +18,15 @@ zig-out/bin/event
 
 You could have an eye on `examples/widget.zig`, this is an example to manage
 a simple widget (redraw after state changes).
+
+### Prism Prompt
+
+An extension library is still WIP, which is inspired by
+[SBoudrias/Inquirer.js](https://github.com/SBoudrias/Inquirer.js).
+This requires you to stay in canonical mode, and provides you a better UI with
+in-time validation.
+
+![examples/event.zig](https://pseudocc.github.io/prism/prompt.gif) 
 
 ## References
 
