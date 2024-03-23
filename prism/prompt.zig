@@ -1,6 +1,29 @@
 const std = @import("std");
 const prism = @import("prism");
 
+pub const Style = struct {
+    const Self = @This();
+    pub const Optional = prism.common.Optional(Self);
+
+    before: []const u8,
+    after: []const u8,
+
+    pub fn fill(self: Self, maybe_other: ?Optional) Self {
+        if (maybe_other == null) {
+            return self;
+        }
+        var result = self;
+        var other = maybe_other.?;
+        if (other.before) |before| {
+            result.before = before;
+        }
+        if (other.after) |after| {
+            result.after = after;
+        }
+        return result;
+    }
+};
+
 pub const terminal = struct {
     const stdout = std.io.getStdOut();
 

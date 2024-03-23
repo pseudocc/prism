@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 const prism = @import("prism");
 const prompt = @import("../prompt.zig");
 
-const g = prism.graphic;
+const Style = prompt.Style;
 const testing = std.testing;
 
 fn prepareQestion(comptime T: type, options: Options(T)) !*prism.Terminal {
@@ -33,13 +33,13 @@ fn prepareQestion(comptime T: type, options: Options(T)) !*prism.Terminal {
     }
 
     try t.enableRaw();
-    const question_style = Style.origin.question.fill(options.theme.question);
+    const question_style = style.question.fill(options.theme.question);
 
     // "\n + up(1)" will preserve a newline for the error message
     try t.print("{s}" ** 3 ++ "\n" ++ "{s}" ** 2, .{
-        question_style.before.?,
+        question_style.before,
         options.question,
-        question_style.after.?,
+        question_style.after,
         prism.cursor.up(1),
         prism.cursor.save,
     });
@@ -264,8 +264,8 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
     const t = try prepareQestion(T, options);
     defer deferCommon(options.cleanup, t);
 
-    const default_style = Style.origin.default.fill(options.theme.default);
-    const invalid_style = Style.origin.invalid.fill(options.theme.invalid);
+    const default_style = style.default.fill(options.theme.default);
+    const invalid_style = style.invalid.fill(options.theme.invalid);
 
     var ctx = InputContext(BufferType){ .input = std.ArrayList(BufferType).init(std.heap.page_allocator) };
     errdefer ctx.input.deinit();
@@ -374,9 +374,9 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
             try t.print("{s}" ** 5, .{
                 prism.cursor.next(1),
                 prism.edit.erase.line(.both),
-                invalid_style.before.?,
+                invalid_style.before,
                 message,
-                invalid_style.after.?,
+                invalid_style.after,
             });
             ctx.confirmed = false;
         }
@@ -388,10 +388,10 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
         const cursor = ctx.cursor;
         if (items.len == 0) {
             const writer = t.buffered.writer();
-            try writer.writeAll(default_style.before.?);
+            try writer.writeAll(default_style.before);
             try options.printDefault(writer);
             try writer.print("{s}" ** 2, .{
-                default_style.after.?,
+                default_style.after,
                 prism.cursor.restore,
             });
         } else {
@@ -426,57 +426,39 @@ fn deferCommon(cleanup: bool, t: *prism.Terminal) void {
     }
 }
 
-pub const Style = struct {
-    before: ?[]const u8 = null,
-    after: ?[]const u8 = null,
-
+const style = struct {
     const p = std.fmt.comptimePrint;
-    const origin = struct {
-        const question: Style = .{
-            .before = p("{s}> {s}", .{
-                g.attrs(&.{g.fg(.{ .ansi = .green })}),
-                g.attrs(&.{}),
-            }),
-            .after = "? ",
-        };
-
-        const default: Style = .{
-            .before = p("{s}", .{
-                g.attrs(&.{g.fg(.{ .ansi = .bright_black })}),
-            }),
-            .after = p("{s}", .{
-                g.attrs(&.{}),
-            }),
-        };
-
-        const invalid: Style = .{
-            .before = p("{s}! {s}", .{
-                g.attrs(&.{g.fg(.{ .ansi = .red })}),
-                g.attrs(&.{}),
-            }),
-            .after = "",
-        };
+    const g = prism.graphic;
+    const question: Style = .{
+        .before = p("{s}> {s}", .{
+            g.attrs(&.{g.fg(.{ .ansi = .green })}),
+            g.attrs(&.{}),
+        }),
+        .after = "? ",
     };
 
-    fn fill(self: Style, maybe_other: ?Style) Style {
-        if (maybe_other == null) {
-            return self;
-        }
-        var result = maybe_other.?;
-        if (self.before != null) {
-            result.before = self.before;
-        }
-        if (self.after != null) {
-            result.after = self.after;
-        }
-        return result;
-    }
+    const default: Style = .{
+        .before = p("{s}", .{
+            g.attrs(&.{g.fg(.{ .ansi = .bright_black })}),
+        }),
+        .after = p("{s}", .{
+            g.attrs(&.{}),
+        }),
+    };
+
+    const invalid: Style = .{
+        .before = p("{s}! {s}", .{
+            g.attrs(&.{g.fg(.{ .ansi = .red })}),
+            g.attrs(&.{}),
+        }),
+        .after = "",
+    };
 };
 
 pub const Theme = struct {
-    question: ?Style = null,
-    default: ?Style = null,
-    invalid: ?Style = null,
+    question: ?Style.Optional = null,
+    default: ?Style.Optional = null,
+    invalid: ?Style.Optional = null,
 };
 
 pub fn Options(comptime T: type) type {
