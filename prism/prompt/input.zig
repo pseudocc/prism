@@ -129,7 +129,7 @@ fn InputContext(comptime T: type) type {
 
         inline fn remove(self: *Self, comptime direction: Direction, word_level: bool) void {
             const count = self.move(direction, word_level);
-            if (count < 0) return;
+            if (count == 0) return;
 
             switch (direction) {
                 .forward => {
