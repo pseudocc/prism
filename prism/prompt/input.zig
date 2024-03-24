@@ -580,16 +580,8 @@ pub const text = struct {
         return result.toOwnedSlice();
     }
 
-    fn bufcopy(dest: []u8, src: []const u8) !usize {
-        const n = src.len;
-        if (n > dest.len) {
-            return error.BufferTooSmall;
-        }
-        @memcpy(dest[0..n], src);
-        return n;
-    }
-
     pub fn buffered(comptime v: Variant, dest: []u8, options: TextOptions) !usize {
+        const bufcopy = prism.common.bufcopy;
         var input = switch (v) {
             .ascii => try readInput([]const u8, u8, options),
             .unicode => try readInput([]const u8, u21, options),
