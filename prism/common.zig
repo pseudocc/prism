@@ -11,6 +11,15 @@ pub const Point = struct {
     y: int = 0,
 };
 
+pub fn bufcopy(dest: []u8, src: []const u8) !usize {
+    const n = src.len;
+    if (n > dest.len) {
+        return error.BufferTooSmall;
+    }
+    @memcpy(dest[0..n], src);
+    return n;
+}
+
 pub fn Optional(comptime StructType: type) type {
     const T = std.builtin.Type;
     const t = switch (@typeInfo(StructType)) {
