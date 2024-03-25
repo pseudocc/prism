@@ -52,4 +52,10 @@ pub fn main() !void {
         else => "Ghost, you are not supposed to be here!",
     };
     try stdout.print("{s}\n", .{message});
+
+    const password = prompt.password.allocated(allocator, .{
+        .prompt = "Enter your password",
+    }) catch |e| return handleInterrupt(e);
+    defer allocator.free(password);
+    try stdout.print("Your password is: {s}\n", .{password});
 }
