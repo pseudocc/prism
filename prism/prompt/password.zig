@@ -9,6 +9,10 @@ fn preparePrompt(options: Options, t: *prism.Terminal) !void {
     try t.enableRaw();
     const prompt_style = style.prompt.fill(options.theme.prompt);
 
+    if (options.cleanup) {
+        try t.unbufferedWrite(prism.cursor.reqpos);
+    }
+
     // "\n + up(1)" will preserve a newline for the error message
     try t.unbufferedPrint("{s}" ** 6, .{
         prompt_style.before,
@@ -145,10 +149,18 @@ pub fn buffered(dest: []u8, options: Options) !usize {
 }
 
 pub fn allocated(allocator: Allocator, options: Options) ![]const u8 {
+    prompt.terminal.reader_mutex.lock();
+    defer prompt.terminal.reader_mutex.unlock();
+
     const t = try prompt.terminal.get();
+    const r = &prompt.terminal.reader;
+
     const origin_raw_enabled = t.raw_enabled;
+    var real_idle: bool = undefined;
+    var origin_cursor: prism.common.Point = undefined;
 
     try t.enableRaw();
+    try r.reset();
     try preparePrompt(options, t);
 
     defer {
@@ -156,9 +168,8 @@ pub fn allocated(allocator: Allocator, options: Options) ![]const u8 {
             t.disableRaw() catch {};
         }
         if (options.cleanup) {
-            t.print("{s}" ** 3, .{
-                prism.cursor.restore,
-                prism.cursor.column(1),
+            t.print("{s}" ** 2, .{
+                prism.cursor.gotoPoint(origin_cursor),
                 prism.edit.erase.display(.below),
             }) catch {};
         } else {
@@ -172,19 +183,13 @@ pub fn allocated(allocator: Allocator, options: Options) ![]const u8 {
     var ctx = InputContext{ .input = std.ArrayList(u8).init(allocator) };
     errdefer ctx.input.deinit();
 
-    prompt.terminal.reader_mutex.lock();
-    defer prompt.terminal.reader_mutex.unlock();
-
-    var real_idle: bool = undefined;
-    const r = &prompt.terminal.reader;
-    try r.reset();
-
     while (!ctx.confirmed) {
         const ev = try r.read();
         const max_len: u16 = @intCast(ctx.input.items.len);
         if (ev != .idle) real_idle = false;
         switch (ev) {
             .idle => real_idle = !try ctx.decVdelay(options),
+            .position => |p| origin_cursor = p,
             .key => |e| {
                 switch (e.key) {
                     .code => |c| if (std.ascii.isPrint(c)) {
