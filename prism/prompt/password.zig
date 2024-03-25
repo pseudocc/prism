@@ -159,6 +159,9 @@ pub fn allocated(allocator: Allocator, options: Options) ![]const u8 {
     var real_idle: bool = undefined;
     var origin_cursor: prism.common.Point = undefined;
 
+    const ESC_HELD = 8;
+    var esc_held: u8 = 0;
+
     try t.enableRaw();
     try r.reset();
     try preparePrompt(options, t);
@@ -187,6 +190,10 @@ pub fn allocated(allocator: Allocator, options: Options) ![]const u8 {
     while (!ctx.confirmed) {
         const ev = try r.read();
         const max_len: u16 = @intCast(ctx.input.items.len);
+
+        const last_esc_held = esc_held != 0;
+        esc_held -= if (last_esc_held) 1 else 0;
+
         if (ev != .idle) real_idle = false;
         switch (ev) {
             .idle => real_idle = !try ctx.decVdelay(options),
@@ -194,15 +201,20 @@ pub fn allocated(allocator: Allocator, options: Options) ![]const u8 {
             .key => |e| {
                 switch (e.key) {
                     .code => |c| if (std.ascii.isPrint(c)) {
+                        esc_held = 0;
                         try ctx.insert(c);
                     } else if (std.ascii.isControl(c)) {
                         switch (c) {
                             std.ascii.control_code.etx => return error.Interrupted,
                             std.ascii.control_code.eot => return error.Aborted,
+                            std.ascii.control_code.esc => {
+                                real_idle = !try ctx.decVdelay(options);
+                                // need a longer delay before repeated ESC key strokes
+                                esc_held = if (last_esc_held) 2 else ESC_HELD;
+                            },
                             else => {},
                         }
                     },
-
                     .home => ctx.cursor = 0,
                     .left => ctx.cursor = if (e.modifiers.ctrl) 0 else @max(ctx.cursor, 1) - 1,
                     .end => ctx.cursor = @intCast(max_len),
@@ -216,7 +228,8 @@ pub fn allocated(allocator: Allocator, options: Options) ![]const u8 {
             else => {},
         }
 
-        if (real_idle) continue;
+        const esc_held_changed = esc_held == ESC_HELD or esc_held == 0;
+        if (real_idle and !esc_held_changed) continue;
 
         if (ctx.justUpdated()) {
             try t.print("{s}" ** 3, .{
@@ -240,14 +253,25 @@ pub fn allocated(allocator: Allocator, options: Options) ![]const u8 {
 
         const items = ctx.input.items;
         const cursor = ctx.cursor;
-        if (std.ascii.isPrint(options.mask) and items.len != 0) {
-            for (0..items.len) |_| {
-                try t.write(options.mask);
+        if (items.len > 0) {
+            var cursor_restore = false;
+            if (esc_held > 0) {
+                for (items) |c| {
+                    try t.write(c);
+                }
+                cursor_restore = true;
+            } else if (std.ascii.isPrint(options.mask)) {
+                for (0..items.len) |_| {
+                    try t.write(options.mask);
+                }
+                cursor_restore = true;
             }
-            try t.print("{s}" ** 2, .{
-                prism.cursor.restore,
-                prism.cursor.right(cursor),
-            });
+            if (cursor_restore) {
+                try t.print("{s}" ** 2, .{
+                    prism.cursor.restore,
+                    prism.cursor.right(cursor),
+                });
+            }
         }
 
         try t.flush();
