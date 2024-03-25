@@ -285,6 +285,7 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
         } else {
             t.write("\r\n") catch {};
         }
+        t.write(prism.graphic.attrs(&.{})) catch {};
         t.flush() catch {};
     }
 

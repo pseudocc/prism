@@ -175,6 +175,7 @@ pub fn allocated(allocator: Allocator, options: Options) ![]const u8 {
         } else {
             t.write("\r\n") catch {};
         }
+        t.write(prism.graphic.attrs(&.{})) catch {};
         t.flush() catch {};
     }
 
