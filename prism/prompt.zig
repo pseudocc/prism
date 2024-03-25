@@ -41,6 +41,22 @@ pub const terminal = struct {
         instance = try prism.Terminal.init(stdout);
         return &instance;
     }
+
+    pub inline fn enableRaw() !void {
+        var term = try get();
+        if (term.raw_enabled) {
+            return error.Unsupported;
+        }
+        try term.enableRaw();
+    }
+
+    pub inline fn disableRaw() !void {
+        var term = try get();
+        if (!term.raw_enabled) {
+            return error.Unsupported;
+        }
+        try term.disableRaw();
+    }
 };
 
 pub const input = @import("prompt/input.zig");
