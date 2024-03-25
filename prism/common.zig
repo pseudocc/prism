@@ -11,6 +11,44 @@ pub const Point = struct {
     y: int = 0,
 };
 
+pub const bench = struct {
+    const stderr = std.io.getStdErr().writer();
+    const Location = std.builtin.SourceLocation;
+    var maybe_last_us: ?i64 = null;
+
+    /// Mark the current location with the time elapsed since the last mark.
+    /// This is useful for debugging and profiling.
+    /// Example:
+    /// ```zig
+    /// fn foo() void {
+    ///    bench.mark();        // clear the last mark
+    ///    compute(&all_cpus);  // do some work
+    ///    bench.mark(@src());
+    /// }
+    /// ```
+    pub inline fn mark(location: ?Location) void {
+        const src = location orelse {
+            maybe_last_us = null;
+            return;
+        };
+        const now_us = std.time.microTimestamp();
+        const factor = std.time.us_per_ms;
+
+        stderr.print("{s}:{d} fn {s}", .{ src.file, src.line, src.fn_name }) catch {};
+        if (maybe_last_us) |last_us| {
+            const delta = now_us - last_us;
+            if (delta < factor) {
+                stderr.print(" {d}us elasped\n", .{delta}) catch {};
+            } else {
+                stderr.print(" {d}ms elasped\n", .{delta / factor}) catch {};
+            }
+        } else {
+            stderr.print(" just started\n", .{}) catch {};
+        }
+        maybe_last_us = now_us;
+    }
+};
+
 pub fn bufcopy(dest: []u8, src: []const u8) !usize {
     const n = src.len;
     if (n > dest.len) {
