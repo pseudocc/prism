@@ -182,7 +182,16 @@ pub const Terminal = struct {
 
     pub inline fn write(self: *Self, data: anytype) !void {
         const writer = self.buffered.writer();
-        try writer.print("{s}", .{data});
+        const fmt = switch (@TypeOf(data)) {
+            graphic.Rendition => "{s}",
+            u8 => "{c}",
+            else => |t| switch (@typeInfo(t)) {
+                .Int, .ComptimeInt => "{d}",
+                .Float, .ComptimeFloat => "{f}",
+                else => "{s}",
+            },
+        };
+        try writer.print(fmt, .{data});
     }
 
     pub inline fn print(self: *Self, comptime fmt: []const u8, args: anytype) !void {
