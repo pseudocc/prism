@@ -266,6 +266,7 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
 
     const origin_raw_enabled = t.raw_enabled;
     var real_idle: bool = undefined;
+    var first_round: bool = true;
     var origin_cursor: prism.common.Point = undefined;
 
     try t.enableRaw();
@@ -295,6 +296,8 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
 
     while (!ctx.confirmed) {
         const ev = try r.read();
+        defer first_round = false;
+
         if (ev != .idle) real_idle = false;
         switch (ev) {
             .idle => real_idle = !try ctx.decVdelay(options),
@@ -379,7 +382,7 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
             else => {},
         }
 
-        if (real_idle) continue;
+        if (real_idle and !first_round) continue;
 
         if (ctx.justUpdated()) {
             try t.print("{s}" ** 3, .{
