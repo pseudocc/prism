@@ -6,7 +6,7 @@ const prompt = @import("../prompt.zig");
 const Style = prompt.Style;
 const testing = std.testing;
 
-fn prepareQestion(comptime T: type, options: Options(T)) !*prism.Terminal {
+fn prepareQestion(comptime T: type, options: Options(T), t: *prism.Terminal) !void {
     if (options.default) |default| {
         const default_value: T = switch (Options(T).kind) {
             .integer => this: {
@@ -27,24 +27,17 @@ fn prepareQestion(comptime T: type, options: Options(T)) !*prism.Terminal {
         }
     }
 
-    const t = try prompt.terminal.get();
-    if (t.raw_enabled) {
-        return error.Unsupported;
-    }
-
-    try t.enableRaw();
     const question_style = style.question.fill(options.theme.question);
 
     // "\n + up(1)" will preserve a newline for the error message
-    try t.print("{s}" ** 3 ++ "\n" ++ "{s}" ** 2, .{
+    try t.unbufferedPrint("{s}" ** 6, .{
         question_style.before,
         options.question,
         question_style.after,
+        "\n",
         prism.cursor.up(1),
         prism.cursor.save,
     });
-
-    return t;
 }
 
 fn InputContext(comptime T: type) type {
@@ -261,8 +254,27 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
         else => @compileError("unsupported type"),
     }
 
-    const t = try prepareQestion(T, options);
-    defer deferCommon(options.cleanup, t);
+    const t = try prompt.terminal.get();
+    const origin_raw_enabled = t.raw_enabled;
+
+    try t.enableRaw();
+    try prepareQestion(T, options, t);
+
+    defer {
+        if (!origin_raw_enabled) {
+            t.disableRaw() catch {};
+        }
+        if (options.cleanup) {
+            t.print("{s}" ** 3, .{
+                prism.cursor.restore,
+                prism.cursor.column(1),
+                prism.edit.erase.display(.below),
+            }) catch {};
+        } else {
+            t.write("\r\n") catch {};
+        }
+        t.flush() catch {};
+    }
 
     const default_style = style.default.fill(options.theme.default);
     const invalid_style = style.invalid.fill(options.theme.invalid);
@@ -410,20 +422,6 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
     }
 
     return ctx.input;
-}
-
-fn deferCommon(cleanup: bool, t: *prism.Terminal) void {
-    t.disableRaw() catch {};
-    t.flush() catch {};
-    if (cleanup) {
-        t.unbufferedPrint("{s}" ** 3, .{
-            prism.cursor.restore,
-            prism.cursor.column(1),
-            prism.edit.erase.display(.below),
-        }) catch {};
-    } else {
-        t.unbufferedWrite("\n") catch {};
-    }
 }
 
 const style = struct {
