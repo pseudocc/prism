@@ -60,6 +60,7 @@ pub const terminal = struct {
 };
 
 pub const input = @import("prompt/input.zig");
+pub const password = @import("prompt/password.zig");
 
 test {
     std.testing.refAllDecls(@This());
