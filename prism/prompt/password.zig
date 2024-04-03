@@ -6,7 +6,6 @@ const prompt = @import("../prompt.zig");
 const Style = prompt.Style;
 
 fn preparePrompt(options: Options, t: *prism.Terminal) !void {
-    try t.enableRaw();
     const prompt_style = style.prompt.fill(options.theme.prompt);
 
     if (options.cleanup) {
