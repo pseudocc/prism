@@ -33,6 +33,46 @@ pub const terminal = struct {
     pub var reader = prism.Terminal.EventReader{ .file = stdout };
     pub var reader_mutex = std.Thread.Mutex{};
 
+    pub const Context = struct {
+        const Self = @This();
+
+        terminal: *prism.Terminal,
+        reader: *prism.Terminal.EventReader,
+        old_state: struct {
+            cursor: prism.common.Point = undefined,
+            raw_enabled: bool,
+        },
+
+        pub fn acquire() !Self {
+            reader_mutex.lock();
+            const term = try get();
+            const raw_enabled = term.raw_enabled;
+            try term.enableRaw();
+            return .{
+                .terminal = term,
+                .reader = &reader,
+                .old_state = .{ .raw_enabled = raw_enabled },
+            };
+        }
+
+        pub fn destroy(self: *Self, cleanup: bool) void {
+            reader_mutex.unlock();
+            if (!self.old_state.raw_enabled) {
+                self.terminal.disableRaw() catch {};
+            }
+            if (cleanup) {
+                self.terminal.print("{s}" ** 2, .{
+                    prism.cursor.gotoPoint(self.old_state.cursor),
+                    prism.edit.erase.display(.below),
+                }) catch {};
+            } else {
+                self.terminal.write("\r\n") catch {};
+            }
+            self.terminal.write(prism.graphic.attrs(&.{})) catch {};
+            self.terminal.flush() catch {};
+        }
+    };
+
     pub fn get() !*prism.Terminal {
         if (inited) {
             return &instance;
@@ -61,6 +101,7 @@ pub const terminal = struct {
 
 pub const input = @import("prompt/input.zig");
 pub const password = @import("prompt/password.zig");
+pub const confirm = @import("prompt/confirm.zig");
 
 test {
     std.testing.refAllDecls(@This());

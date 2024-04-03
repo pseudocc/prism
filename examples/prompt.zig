@@ -30,6 +30,17 @@ pub fn main() !void {
     defer _ = gpa.deinit();
 
     const allocator = gpa.allocator();
+    const readiness = prompt.confirm.decide(.{
+        .question = "Are you ready to start",
+        .default = false,
+    }) catch |e| return handleInterrupt(e);
+    if (readiness) {
+        try stdout.writeAll("Let's get started!\n");
+    } else {
+        try stdout.writeAll("Goodbye!\n");
+        return;
+    }
+
     const name = prompt.input.text.allocated(.unicode, allocator, .{
         .question = "What is your name",
         .default = "Nobody",
