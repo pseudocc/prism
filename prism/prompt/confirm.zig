@@ -44,7 +44,7 @@ pub const Options = struct {
         const question_style = style.question.fill(self.theme.question);
 
         if (self.cleanup) {
-            try t.unbufferedWrite(prism.cursor.reqpos);
+            try t.unbufferedWrite(prism.cursor.position);
         }
 
         try t.print("{s}" ** 4, .{

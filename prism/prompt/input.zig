@@ -30,7 +30,7 @@ fn prepareQestion(comptime T: type, options: Options(T), t: *prism.Terminal) !vo
     const question_style = style.question.fill(options.theme.question);
 
     if (options.cleanup) {
-        try t.unbufferedWrite(prism.cursor.reqpos);
+        try t.unbufferedWrite(prism.cursor.position);
     }
 
     // "\n + up(1)" will preserve a newline for the error message

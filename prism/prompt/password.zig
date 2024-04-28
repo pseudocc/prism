@@ -9,7 +9,7 @@ fn preparePrompt(options: Options, t: *prism.Terminal) !void {
     const prompt_style = style.prompt.fill(options.theme.prompt);
 
     if (options.cleanup) {
-        try t.unbufferedWrite(prism.cursor.reqpos);
+        try t.unbufferedWrite(prism.cursor.position);
     }
 
     // "\n + up(1)" will preserve a newline for the error message
