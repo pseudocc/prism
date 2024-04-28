@@ -32,7 +32,7 @@ pub fn main() !void {
     const allocator = gpa.allocator();
     const readiness = prompt.confirm.decide(.{
         .question = "Are you ready to start",
-        .default = false,
+        .default = true,
     }) catch |e| return handleInterrupt(e);
     if (readiness) {
         try stdout.writeAll("Let's get started!\n");
