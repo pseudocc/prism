@@ -21,7 +21,7 @@ pub const Cursor = union(enum) {
     show: void,
     hide: void,
 
-    reqpos: void,
+    position: void,
 
     pub fn format(
         self: Self,
@@ -81,7 +81,7 @@ pub const Cursor = union(enum) {
             .hide => {
                 return writer.writeAll(csi.ct("[?25l"));
             },
-            .reqpos => {
+            .position => {
                 return writer.writeAll(csi.ct("[6n"));
             },
         }
@@ -234,7 +234,7 @@ pub const hide: Cursor = .hide;
 
 /// Request Cursor Position Report (CPR)
 /// Under the hood: `ESC [ 6 n`
-pub const reqpos: Cursor = .reqpos;
+pub const position: Cursor = .position;
 
 /// Set Cursor Style (DECSCUSR)
 pub const style = struct {
