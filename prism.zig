@@ -170,19 +170,8 @@ pub const Terminal = struct {
         };
     }
 
-    pub inline fn unbufferedWrite(self: *Self, data: anytype) !void {
-        const writer = self.file.writer();
-        try writer.print("{s}", .{data});
-    }
-
-    pub inline fn unbufferedPrint(self: *Self, comptime fmt: []const u8, args: anytype) !void {
-        const writer = self.file.writer();
-        try writer.print(fmt, args);
-    }
-
-    pub inline fn write(self: *Self, data: anytype) !void {
-        const writer = self.buffered.writer();
-        const fmt = switch (@TypeOf(data)) {
+    inline fn writer_write(writer: anytype, data: anytype) !void {
+        const fmt = comptime switch (@TypeOf(data)) {
             graphic.Rendition => "{s}",
             u8 => "{c}",
             else => |t| switch (@typeInfo(t)) {
@@ -192,6 +181,19 @@ pub const Terminal = struct {
             },
         };
         try writer.print(fmt, .{data});
+    }
+
+    pub inline fn unbufferedWrite(self: *Self, data: anytype) !void {
+        try writer_write(self.file.writer(), data);
+    }
+
+    pub inline fn unbufferedPrint(self: *Self, comptime fmt: []const u8, args: anytype) !void {
+        const writer = self.file.writer();
+        try writer.print(fmt, args);
+    }
+
+    pub inline fn write(self: *Self, data: anytype) !void {
+        try writer_write(self.buffered.writer(), data);
     }
 
     pub inline fn print(self: *Self, comptime fmt: []const u8, args: anytype) !void {
