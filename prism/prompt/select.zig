@@ -53,13 +53,13 @@ const style = struct {
     });
 };
 
-const stderr = std.io.getStdErr().writer();
+const Point = prism.common.Point;
 
 const InputContext = struct {
     const Self = @This();
 
     cursor: usize,
-    anchors: []u16,
+    anchors: []Point,
 
     selected: []const u8,
     unselected: []const u8,
@@ -99,17 +99,13 @@ const InputContext = struct {
     fn redraw(self: Self, t: *prism.Terminal) !void {
         for (self.anchors, 0..) |anchor, i| {
             const state = if (i == self.cursor) self.selected else self.unselected;
-            try t.print("{s}" ** 3, .{
-                prism.cursor.restore,
-                prism.cursor.next(anchor),
+            try t.print("{s}" ** 2, .{
+                prism.cursor.gotoPoint(anchor),
                 state,
             });
         }
         const active = self.anchors[self.cursor];
-        try t.print("{s}" ** 2, .{
-            prism.cursor.restore,
-            prism.cursor.next(active),
-        });
+        try t.write(prism.cursor.gotoPoint(active));
         try t.flush();
     }
 };
@@ -163,23 +159,24 @@ pub fn Options(comptime T: type) type {
                 question_style.before,
                 self.question,
                 question_style.after,
-                prism.cursor.save,
+                prism.cursor.position,
                 "\r\n",
             });
 
             var ctx: InputContext = .{
                 .cursor = 0,
-                .anchors = try allocator.alloc(u16, self.choices.len),
+                .anchors = try allocator.alloc(Point, self.choices.len),
                 .selected = selected,
                 .unselected = unselected,
             };
 
-            var anchor_offset: u16 = 1;
+            var anchor_offset: u16 = 0;
             for (self.choices, 0..) |choice, i| {
                 if (choice.selected)
                     ctx.cursor = i;
 
-                ctx.anchors[i] = anchor_offset;
+                ctx.anchors[i] = .{ .x = 1, .y = anchor_offset };
+
                 try t.print("{s}" ** 5, .{
                     if (choice.selected) selected else unselected,
                     title_style.before,
@@ -200,10 +197,24 @@ pub fn Options(comptime T: type) type {
                 }
             }
 
+            for (0..self.choices.len) |i| {
+                const offset = ctx.anchors[i];
+                ctx.anchors[i] = .{
+                    .x = 1,
+                    .y = anchor_offset - offset.y,
+                };
+            }
+            try t.write(prism.cursor.position);
+
             return ctx;
         }
     };
 }
+
+const PositionState = enum {
+    after_question,
+    after_choices,
+};
 
 pub fn choose(comptime T: type, options: Options(T)) !T {
     var tctx = try prompt.terminal.Context.acquire();
@@ -215,18 +226,38 @@ pub fn choose(comptime T: type, options: Options(T)) !T {
     var real_idle: bool = undefined;
     var first_render: bool = true;
 
-    if (options.cleanup) {
-        try t.unbufferedWrite(prism.cursor.position);
-    }
-
     var ctx = try options.prepare(t);
+    var ps = PositionState.after_question;
+    var after_question: prism.common.Point = undefined;
 
     while (true) {
         const ev = try r.read();
         real_idle = true;
 
         switch (ev) {
-            .position => |p| tctx.old_state.cursor = p,
+            .position => |p| {
+                switch (ps) {
+                    .after_question => {
+                        after_question = p;
+                        ps = .after_choices;
+                    },
+                    .after_choices => {
+                        const first_anchor = ctx.anchors[0];
+                        for (0..ctx.anchors.len) |i| {
+                            const offset = ctx.anchors[i];
+                            ctx.anchors[i] = .{
+                                .x = 1,
+                                .y = p.y - offset.y,
+                            };
+                        }
+                        after_question.y = p.y - first_anchor.y - 1;
+                        tctx.old_state.cursor = .{
+                            .x = 1,
+                            .y = after_question.y + 1,
+                        };
+                    },
+                }
+            },
             .key => |e| switch (e.key) {
                 .code => |c| switch (c) {
                     'j', 'J' => real_idle = !ctx.down(),
@@ -255,7 +286,7 @@ pub fn choose(comptime T: type, options: Options(T)) !T {
     if (!options.cleanup) {
         const title_style = style.choice_title.fill(options.theme.choice_title);
         try t.unbufferedPrint("{s}" ** 5, .{
-            prism.cursor.restore,
+            prism.cursor.gotoPoint(after_question),
             prism.edit.erase.display(.below),
             title_style.before,
             choice.title,
