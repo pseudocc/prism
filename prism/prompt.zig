@@ -102,6 +102,7 @@ pub const terminal = struct {
 pub const input = @import("prompt/input.zig");
 pub const password = @import("prompt/password.zig");
 pub const confirm = @import("prompt/confirm.zig");
+pub const select = @import("prompt/select.zig");
 
 test {
     std.testing.refAllDecls(@This());

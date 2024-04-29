@@ -25,6 +25,13 @@ inline fn handleInterrupt(e: anyerror) !void {
     return e;
 }
 
+const Fruit = enum {
+    Apple,
+    Banana,
+    Cherry,
+    Durian,
+};
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -40,6 +47,39 @@ pub fn main() !void {
         try stdout.writeAll("Goodbye!\n");
         return;
     }
+
+    const favorite_fruit = prompt.select.choose(Fruit, .{
+        .question = "What is your favorite fruit",
+        .choices = &.{
+            .{
+                .title = "Apple",
+                .tip = "A fruit that keeps the doctor away",
+                .value = .Apple,
+            },
+            .{
+                .title = "Banana",
+                .tip = "A fruit that monkeys love",
+                .selected = true,
+                .value = .Banana,
+            },
+            .{
+                .title = "Cherry",
+                .value = .Cherry,
+            },
+            .{
+                .title = "Durian",
+                .tip = "A fruit that smells bad but tastes good",
+                .value = .Durian,
+            },
+        },
+    }) catch |e| return handleInterrupt(e);
+    const remark = switch (favorite_fruit) {
+        .Apple => "You like apples, good for your health!",
+        .Banana => "I like bananas too!",
+        .Cherry => "Cherries are delicious, but watch out for the pits!",
+        .Durian => "How can you like durians, they smell so bad!",
+    };
+    try stdout.print("{s}\n", .{remark});
 
     const name = prompt.input.text.allocated(.unicode, allocator, .{
         .question = "What is your name",
