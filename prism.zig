@@ -107,8 +107,11 @@ pub const Mouse = enum {
 };
 
 pub const Terminal = struct {
-    const os = std.os;
-    const sys = os.system;
+    const os = std.os.linux;
+    const iflag = os.tc_iflag_t;
+    const oflag = os.tc_oflag_t;
+    const cflag = os.tc_cflag_t;
+    const lflag = os.tc_lflag_t;
     const File = std.fs.File;
     const Self = @This();
     const BufferedWriter = std.io.BufferedWriter(4096, File.Writer);
@@ -122,18 +125,23 @@ pub const Terminal = struct {
 
     pub fn init(file: File) !Terminal {
         const fd = file.handle;
-        const canonical = try os.tcgetattr(fd);
+        const canonical = try std.posix.tcgetattr(fd);
         var raw = canonical;
 
-        raw.iflag &= ~(sys.BRKINT | sys.ICRNL | sys.INPCK |
-            sys.ISTRIP | sys.IXON);
-        raw.oflag &= ~(sys.OPOST);
-        raw.cflag |= (sys.CS8);
-        raw.lflag &= ~(sys.ECHO | sys.ICANON | sys.IEXTEN | sys.ISIG);
+        inline for (.{ "BRKINT", "ICRNL", "INPCK", "ISTRIP", "IXON" }) |flag| {
+            @field(raw.iflag, flag) = false;
+        }
+        inline for (.{"OPOST"}) |flag| {
+            @field(raw.oflag, flag) = false;
+        }
+        inline for (.{ "ECHO", "ICANON", "IEXTEN", "ISIG" }) |flag| {
+            @field(raw.lflag, flag) = false;
+        }
+        raw.cflag.CSIZE = .CS8;
 
         // blocking read with timeout
-        raw.cc[sys.V.MIN] = 0;
-        raw.cc[sys.V.TIME] = 1;
+        raw.cc[@as(usize, @intFromEnum(os.V.MIN))] = 0;
+        raw.cc[@as(usize, @intFromEnum(os.V.TIME))] = 1;
 
         return .{
             .canonical = canonical,
@@ -143,27 +151,32 @@ pub const Terminal = struct {
         };
     }
 
+    fn tcsetattrFlush(self: Self, p: *const os.termios) !void {
+        const code = os.tcsetattr(self.file.handle, .FLUSH, p);
+        if (code != 0)
+            return error.TCSETATTR;
+    }
+
     pub fn enableRaw(self: *Self) !void {
         if (self.raw_enabled) return;
 
-        try os.tcsetattr(self.file.handle, .FLUSH, self.raw);
+        try self.tcsetattrFlush(&self.raw);
         self.raw_enabled = true;
     }
 
     pub fn disableRaw(self: *Self) !void {
         if (!self.raw_enabled) return;
 
-        try os.tcsetattr(self.file.handle, .FLUSH, self.canonical);
+        try self.tcsetattrFlush(&self.canonical);
         self.raw_enabled = false;
     }
 
     pub fn size(self: *Self) !common.Size {
-        var sz: sys.winsize = undefined;
+        var sz: os.winsize = undefined;
         const fd = self.file.handle;
-        const code = sys.ioctl(fd, sys.T.IOCGWINSZ, @intFromPtr(&sz));
-        if (code != 0) {
+        const code = os.ioctl(fd, os.T.IOCGWINSZ, @intFromPtr(&sz));
+        if (code != 0)
             return error.IOCTL;
-        }
         return .{
             .width = sz.ws_col,
             .height = sz.ws_row,

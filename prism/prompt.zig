@@ -9,11 +9,8 @@ pub const Style = struct {
     after: []const u8,
 
     pub fn fill(self: Self, maybe_other: ?Optional) Self {
-        if (maybe_other == null) {
-            return self;
-        }
+        const other = maybe_other orelse return self;
         var result = self;
-        var other = maybe_other.?;
         if (other.before) |before| {
             result.before = before;
         }

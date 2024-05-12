@@ -107,6 +107,8 @@ pub fn decide(options: Options) !bool {
         }
 
         if (real_idle and !first_render) continue;
+        first_render = false;
+
         if (maybe_decision) |decision| {
             try t.print("{s}" ** 2, .{
                 prism.cursor.restore,

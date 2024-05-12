@@ -139,7 +139,7 @@ pub fn main() !void {
             else => {},
         }
 
-        var now = std.time.milliTimestamp();
+        const now = std.time.milliTimestamp();
         if (now - last > 500) {
             w.words += 1;
             last = now;

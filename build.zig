@@ -1,36 +1,35 @@
 const std = @import("std");
 
+const ModuleDependency = struct {
+    name: []const u8,
+    module: *std.Build.Module,
+};
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
     const csi = b.createModule(.{
-        .source_file = .{ .path = "utils/csi.zig" },
+        .root_source_file = b.path("utils/csi.zig"),
     });
     const common = b.addModule("prism.common", .{
-        .source_file = .{ .path = "prism/common.zig" },
+        .root_source_file = b.path("prism/common.zig"),
     });
     const cursor = b.addModule("prism.cursor", .{
-        .source_file = .{ .path = "prism/cursor.zig" },
-        .dependencies = &.{
-            .{ .name = "prism.csi", .module = csi },
-            .{ .name = "prism.common", .module = common },
-        },
+        .root_source_file = b.path("prism/cursor.zig"),
     });
+    cursor.addImport("prism.csi", csi);
+    cursor.addImport("prism.common", common);
     const edit = b.addModule("prism.edit", .{
-        .source_file = .{ .path = "prism/edit.zig" },
-        .dependencies = &.{
-            .{ .name = "prism.csi", .module = csi },
-        },
+        .root_source_file = b.path("prism/edit.zig"),
     });
+    edit.addImport("prism.csi", csi);
     const graphic = b.addModule("prism.graphic", .{
-        .source_file = .{ .path = "prism/graphic.zig" },
-        .dependencies = &.{
-            .{ .name = "prism.csi", .module = csi },
-        },
+        .root_source_file = b.path("prism/graphic.zig"),
     });
+    graphic.addImport("prism.csi", csi);
 
-    const prism_deps: []const std.build.ModuleDependency = &.{
+    const prism_deps: []const ModuleDependency = &.{
         .{ .name = "prism.csi", .module = csi },
         .{ .name = "prism.common", .module = common },
         .{ .name = "prism.cursor", .module = cursor },
@@ -38,36 +37,41 @@ pub fn build(b: *std.Build) void {
         .{ .name = "prism.graphic", .module = graphic },
     };
     const prism = b.addModule("prism", .{
-        .source_file = .{ .path = "prism.zig" },
-        .dependencies = prism_deps,
+        .root_source_file = b.path("prism.zig"),
     });
+    for (prism_deps) |dep| {
+        prism.addImport(dep.name, dep.module);
+    }
 
     const prompt = b.addModule("prism.prompt", .{
-        .source_file = .{ .path = "prism/prompt.zig" },
-        .dependencies = &.{
-            .{ .name = "prism", .module = prism },
-        },
+        .root_source_file = b.path("prism/prompt.zig"),
     });
+    const prompt_deps: []const ModuleDependency = &.{
+        .{ .name = "prism", .module = prism },
+    };
+    for (prompt_deps) |dep| {
+        prompt.addImport(dep.name, dep.module);
+    }
 
     var lib = b.addStaticLibrary(.{
         .name = "prism",
-        .root_source_file = prism.source_file,
+        .root_source_file = prism.root_source_file.?,
         .target = target,
         .optimize = optimize,
     });
     for (prism_deps) |dep| {
-        lib.addModule(dep.name, dep.module);
+        lib.root_module.addImport(dep.name, dep.module);
     }
     b.installArtifact(lib);
 
     var prompt_lib = b.addStaticLibrary(.{
         .name = "prism.prompt",
-        .root_source_file = prompt.source_file,
+        .root_source_file = prompt.root_source_file.?,
         .target = target,
         .optimize = optimize,
     });
-    for (prompt.dependencies.keys()) |name| {
-        prompt_lib.addModule(name, prompt.dependencies.get(name).?);
+    for (prompt_deps) |dep| {
+        prompt_lib.root_module.addImport(dep.name, dep.module);
     }
     b.installArtifact(prompt_lib);
 
@@ -83,12 +87,14 @@ pub fn build(b: *std.Build) void {
     const all_modules = core_modules ++ extension_modules;
     inline for (all_modules) |module| {
         const tests = b.addTest(.{
-            .root_source_file = module.source_file,
+            .root_source_file = module.root_source_file.?,
             .target = target,
             .optimize = optimize,
         });
-        for (module.dependencies.keys()) |name| {
-            tests.addModule(name, module.dependencies.get(name).?);
+
+        var iter = common.iterateDependencies(tests, true);
+        while (iter.next()) |dep| {
+            tests.root_module.addImport(dep.name, dep.module);
         }
 
         const run_tests = b.addRunArtifact(tests);
@@ -100,13 +106,13 @@ pub fn build(b: *std.Build) void {
     for (examples) |name| {
         const example = b.addExecutable(.{
             .name = name,
-            .root_source_file = .{ .path = b.fmt("examples/{s}.zig", .{name}) },
+            .root_source_file = b.path(b.fmt("examples/{s}.zig", .{name})),
             .target = target,
             .optimize = optimize,
         });
         const install_example = b.addInstallArtifact(example, .{});
-        example.addModule("prism", prism);
-        example.addModule("prism.prompt", prompt);
+        example.root_module.addImport("prism", prism);
+        example.root_module.addImport("prism.prompt", prompt);
         examples_step.dependOn(&example.step);
         examples_step.dependOn(&install_example.step);
     }

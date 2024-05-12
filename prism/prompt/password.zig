@@ -142,7 +142,7 @@ const InputContext = struct {
 
 pub fn buffered(dest: []u8, options: Options) !usize {
     const allocator = std.heap.page_allocator;
-    var input = try allocated(allocator, options);
+    const input = try allocated(allocator, options);
     defer allocator.free(input);
     return prism.common.bufcopy(dest, input);
 }

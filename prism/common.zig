@@ -84,7 +84,7 @@ pub fn Optional(comptime StructType: type) type {
         }
         var ot = t;
         ot.fields = &fields;
-        ot.layout = .Auto;
+        ot.layout = .auto;
         ot.decls = &.{};
 
         break :this ot;
