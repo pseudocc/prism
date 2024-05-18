@@ -2,6 +2,8 @@ const std = @import("std");
 const testing = std.testing;
 const csi = @import("prism.csi");
 
+const global = @This();
+
 pub const AttributeTrait = union(enum) {
     style: styles.Attribute,
     color: colors.Attribute,
@@ -38,11 +40,7 @@ pub inline fn unset(value: styles.Ansi) AttributeTrait {
     return internal_set(value, false);
 }
 
-// aliases to avoid shadowing inside Rendition
-const gfg = fg;
-const gbg = bg;
-
-const InternalRendition = struct {
+pub const IR = struct {
     pub const Self = @This();
 
     items: []const AttributeTrait,
@@ -71,9 +69,12 @@ const InternalRendition = struct {
     }
 };
 
+pub inline fn ir(items: []const AttributeTrait) IR {
+    return IR{ .items = items };
+}
+
 pub fn attrs(comptime items: []const AttributeTrait) []const u8 {
-    const r = InternalRendition{ .items = items };
-    return std.fmt.comptimePrint("{}", .{r});
+    return std.fmt.comptimePrint("{}", .{ir(items)});
 }
 
 /// Select Graphic Rendition (SGR)
@@ -94,13 +95,13 @@ pub const Rendition = struct {
 
     /// convenience function ignores errors
     pub fn fg(self: *Self, value: colors.Trait) *Self {
-        self.attrs.append(gfg(value)) catch unreachable;
+        self.attrs.append(global.fg(value)) catch unreachable;
         return self;
     }
 
     /// convenience function ignores errors
     pub fn bg(self: *Self, value: colors.Trait) *Self {
-        self.attrs.append(gbg(value)) catch unreachable;
+        self.attrs.append(global.bg(value)) catch unreachable;
         return self;
     }
 
@@ -134,7 +135,7 @@ pub const Rendition = struct {
         _: std.fmt.FormatOptions,
         writer: anytype,
     ) !void {
-        const r = InternalRendition{ .items = self.attrs.items };
+        const r = IR{ .items = self.attrs.items };
         try std.fmt.format(writer, "{}", .{r});
     }
 };
