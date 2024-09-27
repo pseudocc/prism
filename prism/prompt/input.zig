@@ -308,12 +308,12 @@ fn readInput(comptime T: type, comptime BufferType: type, options: Options(T)) !
                     .code => |c| if (std.ascii.isPrint(c)) {
                         const is_valid = if (T == []const u8) true else this: {
                             const signed = switch (@typeInfo(T)) {
-                                .Int => |i| i.signedness == .signed,
-                                .Float => true,
+                                .int => |i| i.signedness == .signed,
+                                .float => true,
                                 else => unreachable,
                             };
                             const is_float = switch (@typeInfo(T)) {
-                                .Float => true,
+                                .float => true,
                                 else => false,
                             };
 
@@ -480,8 +480,8 @@ pub fn Options(comptime T: type) type {
 
         const Self = @This();
         const kind: OutputKind = if (T == []const u8) .string else switch (@typeInfo(T)) {
-            .Int => .integer,
-            .Float => .float,
+            .int => .integer,
+            .float => .float,
             else => @compileError("unsupported type"),
         };
 
@@ -679,7 +679,7 @@ pub fn number(comptime T: type) type {
 
         fn parse(items: []const u8) !T {
             switch (@typeInfo(T)) {
-                .Int => {
+                .int => {
                     const base: u8 = if (items.len > 2 and items[0] == '0') this: {
                         switch (std.ascii.toLower(items[1])) {
                             'x' => break :this 16,
@@ -690,7 +690,7 @@ pub fn number(comptime T: type) type {
                     } else return std.fmt.parseInt(T, items, 10);
                     return std.fmt.parseInt(T, items[2..], base);
                 },
-                .Float => return std.fmt.parseFloat(T, items),
+                .float => return std.fmt.parseFloat(T, items),
                 else => unreachable,
             }
         }
@@ -704,7 +704,7 @@ pub fn number(comptime T: type) type {
             }
 
             return switch (@typeInfo(T)) {
-                .Int, .Float => parse(input.items),
+                .int, .float => parse(input.items),
                 else => unreachable,
             };
         }

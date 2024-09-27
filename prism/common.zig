@@ -61,7 +61,7 @@ pub fn bufcopy(dest: []u8, src: []const u8) !usize {
 pub fn Optional(comptime StructType: type) type {
     const T = std.builtin.Type;
     const t = switch (@typeInfo(StructType)) {
-        .Struct => |case| case,
+        .@"struct" => |case| case,
         else => @compileError("Optional only works with structs"),
     };
 
@@ -71,9 +71,9 @@ pub fn Optional(comptime StructType: type) type {
 
         for (t.fields) |field| {
             fields[i] = field;
-            if (@typeInfo(field.type) != .Optional) {
+            if (@typeInfo(field.type) != .optional) {
                 const ot = @Type(.{
-                    .Optional = .{ .child = field.type },
+                    .optional = .{ .child = field.type },
                 });
                 const ot_null: ot = null;
                 fields[i].type = ot;
@@ -90,7 +90,7 @@ pub fn Optional(comptime StructType: type) type {
         break :this ot;
     };
 
-    return @Type(.{ .Struct = proto });
+    return @Type(.{ .@"struct" = proto });
 }
 
 test "prism.common.Optional" {

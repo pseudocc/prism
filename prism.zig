@@ -188,8 +188,8 @@ pub const Terminal = struct {
             graphic.Rendition => "{s}",
             u8 => "{c}",
             else => |t| switch (@typeInfo(t)) {
-                .Int, .ComptimeInt => "{d}",
-                .Float, .ComptimeFloat => "{f}",
+                .int, .comptime_int => "{d}",
+                .float, .comptime_float => "{f}",
                 else => "{s}",
             },
         };
